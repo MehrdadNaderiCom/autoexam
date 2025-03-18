@@ -55,7 +55,7 @@ class QuestionGenerator:
         return [word for word in words if len(word) >= 4 and word.isalnum()]
 
     def _enhance_with_chatgpt(self, sentence: str, keyword: str) -> Dict[str, Union[str, List[str]]]:
-        """Use ChatGPT to create a better question from the sentence and keyword."""
+        """Use ChatGPT to create a multiple-choice question."""
         try:
             if not openai.api_key:
                 logger.warning("OpenAI API key not found, falling back to basic question generation")
@@ -92,7 +92,7 @@ class QuestionGenerator:
                     'explanation': result['explanation']
                 }
             except Exception as e:
-                logger.warning(f"Failed to parse ChatGPT response: {str(e)}, falling back to basic question")
+                logger.warning(f"Failed to parse ChatGPT response: {str(e)}")
                 return None
 
         except Exception as e:
@@ -100,7 +100,7 @@ class QuestionGenerator:
             return None
 
     def _generate_basic_question(self, sentence: str, keyword: str) -> Dict[str, Union[str, List[str]]]:
-        """Generate a basic fill-in-the-blank question as fallback."""
+        """Generate a basic fill-in-the-blank question."""
         question_text = sentence.replace(keyword, "________")
         return {
             'type': 'fill_blank',
@@ -114,44 +114,55 @@ class QuestionGenerator:
         """Generate questions from the given content."""
         try:
             # Handle both string and dictionary content
-            if isinstance(content, str):
-                text = content
-                wiki_url = ''
-            else:
+            if isinstance(content, dict):
                 text = content.get('text', '')
                 wiki_url = content.get('url', '')
+            else:
+                text = str(content)
+                wiki_url = ''
 
             sentences = self._tokenize_text(text)
             if not sentences:
-                return None
+                return []
             
             questions = []
+            attempts = 0
+            max_attempts = num_questions * 2  # Allow for some failed attempts
             
-            for _ in range(min(num_questions, len(sentences))):
+            while len(questions) < num_questions and attempts < max_attempts:
+                if not sentences:
+                    break
+                
                 sentence = random.choice(sentences)
                 sentences.remove(sentence)  # Avoid reusing the same sentence
                 
                 try:
                     keywords = self._extract_keywords(sentence)
-                    if keywords:
-                        keyword = random.choice(keywords)
-                        question_data = self._enhance_with_chatgpt(sentence, keyword)
-                        if question_data:
-                            question_data['source_url'] = wiki_url  # Add Wikipedia URL to question data
-                            questions.append(question_data)
-                        else:
-                            # Fallback to basic question if ChatGPT fails
-                            question = self._generate_basic_question(sentence, keyword)
-                            if question:
-                                question['source_url'] = wiki_url  # Add Wikipedia URL to fallback question
-                                questions.append(question)
+                    if not keywords:
+                        continue
+                        
+                    keyword = random.choice(keywords)
+                    
+                    # Try to generate a multiple-choice question first
+                    question_data = self._enhance_with_chatgpt(sentence, keyword)
+                    
+                    # If ChatGPT fails, fall back to fill-in-the-blank
+                    if not question_data:
+                        question_data = self._generate_basic_question(sentence, keyword)
+                    
+                    if question_data:
+                        question_data['source_url'] = wiki_url
+                        questions.append(question_data)
+                
                 except Exception as e:
-                    logger.error(f"Error generating question: {e}")
-                    continue
+                    logger.warning(f"Failed to generate question: {str(e)}")
+                
+                attempts += 1
             
             return questions if questions else None
+            
         except Exception as e:
-            logger.error(f"Error in generate_questions: {e}")
+            logger.error(f"Error in generate_questions: {str(e)}")
             return None
 
 # Initialize the question generator

@@ -148,28 +148,29 @@
 
                 <!-- Question display section -->
                 <div id="questionsContainer" class="mt-4" style="display: none;">
-                    <div class="card">
-                        <div class="card-body">
-                            <h3 class="card-title mb-4">Generated Questions</h3>
-                            <div id="questions"></div>
-                        </div>
-                    </div>
+                    <h2>Generated Questions</h2>
+                    <div id="questions"></div>
                 </div>
             </div>
         </div>
     </div>
 
     <script>
-        document.getElementById('generateForm').onsubmit = async function(e) {
+        document.getElementById('generateForm').addEventListener('submit', async (e) => {
             e.preventDefault();
             
             const topic = document.getElementById('topic').value;
             const numQuestions = document.getElementById('numQuestions').value;
+            const loadingSpinner = document.getElementById('loadingSpinner');
+            const errorMessage = document.getElementById('errorMessage');
+            const questionsContainer = document.getElementById('questionsContainer');
+            const questionsDiv = document.getElementById('questions');
             
-            // Show loading spinner and hide other elements
-            document.getElementById('loadingSpinner').style.display = 'block';
-            document.getElementById('questionsContainer').style.display = 'none';
-            document.getElementById('errorMessage').style.display = 'none';
+            // Show loading spinner
+            loadingSpinner.style.display = 'block';
+            errorMessage.style.display = 'none';
+            questionsContainer.style.display = 'none';
+            questionsDiv.innerHTML = '';
             
             try {
                 const response = await fetch('/generate_exam', {
@@ -177,93 +178,84 @@
                     headers: {
                         'Content-Type': 'application/json'
                     },
-                    body: JSON.stringify({
-                        topic: topic,
-                        num_questions: parseInt(numQuestions)
-                    })
+                    body: JSON.stringify({ topic, num_questions: numQuestions })
                 });
                 
                 const data = await response.json();
                 
-                if (response.ok) {
-                    const questionsDiv = document.getElementById('questions');
-                    questionsDiv.innerHTML = '';
-                    
-                    data.questions.forEach((q, index) => {
-                        const questionCard = document.createElement('div');
-                        questionCard.className = 'card mb-4';
-                        
-                        let optionsHtml = '';
-                        if (q.options && q.options.length > 0) {
-                            optionsHtml = `
-                                <div class="options-list mt-3">
-                                    ${q.options.map((option, i) => `
-                                        <div class="form-check">
-                                            <input class="form-check-input" type="radio" name="q${index}" id="q${index}o${i}" disabled>
-                                            <label class="form-check-label" for="q${index}o${i}">
-                                                ${option}
-                                            </label>
-                                        </div>
-                                    `).join('')}
-                                </div>
-                            `;
-                        }
-                        
-                        questionCard.innerHTML = `
-                            <div class="card-body">
-                                <h5 class="card-title">Question ${index + 1}</h5>
-                                <p class="card-text">${q.question}</p>
-                                ${optionsHtml}
-                                <div class="answer-section mt-3">
-                                    <button class="btn btn-outline-primary btn-sm toggle-answer" onclick="toggleAnswer(${index})">
-                                        Show Answer
-                                    </button>
-                                    <div class="answer-content mt-2" id="answer${index}" style="display: none;">
-                                        <div class="alert alert-success">
-                                            <strong>Answer:</strong> ${q.answer}
-                                        </div>
-                                        ${q.explanation ? `
-                                            <div class="alert alert-info">
-                                                <strong>Explanation:</strong> ${q.explanation}
-                                            </div>
-                                        ` : ''}
-                                    </div>
-                                </div>
-                                ${q.source_url ? `
-                                    <div class="mt-2">
-                                        <small class="text-muted">
-                                            Source: <a href="${q.source_url}" target="_blank">Wikipedia</a>
-                                        </small>
-                                    </div>
-                                ` : ''}
-                            </div>
-                        `;
-                        
-                        questionsDiv.appendChild(questionCard);
-                    });
-                    
-                    document.getElementById('questionsContainer').style.display = 'block';
-                } else {
+                if (!response.ok) {
                     throw new Error(data.error || 'Failed to generate questions');
                 }
+                
+                // Display questions
+                data.questions.forEach((question, index) => {
+                    const questionCard = document.createElement('div');
+                    questionCard.className = 'question-card';
+                    
+                    let questionHTML = `
+                        <h3>Question ${index + 1}</h3>
+                        <p class="question-text">${question.question}</p>
+                    `;
+                    
+                    // Add options for multiple choice questions
+                    if (question.type === 'multiple_choice' && question.options) {
+                        questionHTML += '<ul class="option-list">';
+                        question.options.forEach((option, optIndex) => {
+                            questionHTML += `
+                                <li class="option" data-index="${optIndex}">
+                                    ${String.fromCharCode(65 + optIndex)}. ${option}
+                                </li>
+                            `;
+                        });
+                        questionHTML += '</ul>';
+                    }
+                    
+                    // Add source attribution
+                    if (question.source_url) {
+                        questionHTML += `
+                            <div class="source-link">
+                                Source: <a href="${question.source_url}" target="_blank">Wikipedia</a>
+                            </div>
+                        `;
+                    }
+                    
+                    // Add answer section
+                    questionHTML += `
+                        <button class="toggle-answer" onclick="toggleAnswer(this)">
+                            <i class="fas fa-eye"></i> Show Answer
+                        </button>
+                        <div class="answer-section">
+                            <strong>Answer:</strong> ${question.answer}
+                            ${question.explanation ? `
+                                <div class="explanation">
+                                    <strong>Explanation:</strong> ${question.explanation}
+                                </div>
+                            ` : ''}
+                        </div>
+                    `;
+                    
+                    questionCard.innerHTML = questionHTML;
+                    questionsDiv.appendChild(questionCard);
+                });
+                
+                questionsContainer.style.display = 'block';
+                
             } catch (error) {
-                document.getElementById('errorMessage').textContent = error.message;
-                document.getElementById('errorMessage').style.display = 'block';
+                errorMessage.textContent = error.message;
+                errorMessage.style.display = 'block';
             } finally {
-                document.getElementById('loadingSpinner').style.display = 'none';
+                loadingSpinner.style.display = 'none';
             }
-        };
+        });
 
-        function toggleAnswer(index) {
-            const answerDiv = document.getElementById(`answer${index}`);
-            const button = answerDiv.previousElementSibling;
-            if (answerDiv.style.display === 'none') {
-                answerDiv.style.display = 'block';
-                button.textContent = 'Hide Answer';
-            } else {
-                answerDiv.style.display = 'none';
-                button.textContent = 'Show Answer';
-            }
+        function toggleAnswer(button) {
+            const answerSection = button.nextElementSibling;
+            const isVisible = answerSection.classList.contains('visible');
+            
+            answerSection.classList.toggle('visible');
+            button.innerHTML = isVisible ? 
+                '<i class="fas fa-eye"></i> Show Answer' : 
+                '<i class="fas fa-eye-slash"></i> Hide Answer';
         }
     </script>
 </body>

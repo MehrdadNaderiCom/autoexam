@@ -67,9 +67,11 @@ class Question(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     topic = db.Column(db.String(200), nullable=False)
     question_text = db.Column(db.Text, nullable=False)
+    question_type = db.Column(db.String(20), nullable=False)  # 'multiple_choice' or 'fill_blank'
     options = db.Column(db.Text)  # Stored as JSON string
     answer = db.Column(db.Text, nullable=False)
-    source_url = db.Column(db.Text)  # Added for Wikipedia source URL
+    explanation = db.Column(db.Text)
+    source_url = db.Column(db.Text)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     def to_dict(self):
@@ -78,8 +80,10 @@ class Question(db.Model):
             'id': self.id,
             'topic': self.topic,
             'question': self.question_text,
-            'options': eval(self.options),  # Convert JSON string back to list
+            'type': self.question_type,
+            'options': eval(self.options) if self.options else [],
             'answer': self.answer,
+            'explanation': self.explanation,
             'source_url': self.source_url,
             'created_at': self.created_at.isoformat()
         }
@@ -144,38 +148,43 @@ def generate_exam():
             logger.warning("Failed to generate questions")
             return jsonify({'error': 'Could not generate questions'}), 500
 
-        # Save questions to database
-        logger.info("Saving questions to database")
-        saved_questions = []
+        # Store questions in the database
+        stored_questions = []
         for q in questions:
             question = Question(
                 topic=topic,
                 question_text=q['question'],
-                options=str(q['options']),
+                question_type=q['type'],
+                options=str(q.get('options', [])),
                 answer=q['answer'],
-                source_url=q.get('source_url', ''),
-                created_at=datetime.utcnow()
+                explanation=q.get('explanation', ''),
+                source_url=q.get('source_url', '')
             )
             db.session.add(question)
-            saved_questions.append(question)
-        
-        db.session.commit()
-        logger.info(f"Successfully generated and saved {len(saved_questions)} questions")
+            stored_questions.append(question.to_dict())
 
-        # Return questions with answers
+        # Store the exam
+        exam = Exam(
+            topic=topic,
+            questions=stored_questions
+        )
+        db.session.add(exam)
+        
+        try:
+            db.session.commit()
+            logger.info("Successfully stored questions and exam in database")
+        except Exception as e:
+            db.session.rollback()
+            logger.error(f"Failed to store questions in database: {str(e)}")
+            # Continue anyway - we can still return the generated questions
+
         return jsonify({
-            'questions': [{
-                'id': q.id,
-                'topic': q.topic,
-                'question': q.question_text,
-                'options': eval(q.options) if q.options else [],
-                'answer': q.answer,
-                'explanation': q.explanation if hasattr(q, 'explanation') else None,
-                'source_url': q.source_url
-            } for q in saved_questions]
+            'questions': stored_questions,
+            'exam_id': exam.id if exam else None
         })
+
     except Exception as e:
-        logger.error(f"Error generating exam: {str(e)}", exc_info=True)
+        logger.error(f"Error in generate_exam: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
 @app.route('/exam/<int:exam_id>', methods=['GET'])
