@@ -57,7 +57,7 @@ class Exam(db.Model):
 def home():
     return render_template('index.html')
 
-@app.route('/generate', methods=['POST'])
+@app.route('/api/generate', methods=['POST'])
 def generate_exam():
     try:
         data = request.get_json()
@@ -85,10 +85,27 @@ def generate_exam():
         db.session.add(exam)
         db.session.commit()
         
+        # Format questions for frontend
+        formatted_questions = []
+        for q in questions:
+            if q['type'] == 'multiple_choice':
+                formatted_questions.append({
+                    'question_type': 'multiple_choice',
+                    'question_text': q['question'],
+                    'options': q['options'],
+                    'answer_text': q['answer']
+                })
+            else:  # fill_blank
+                formatted_questions.append({
+                    'question_type': 'fill_blank',
+                    'question_text': q['question'],
+                    'answer_text': q['answer']
+                })
+        
         return jsonify({
             'id': exam.id,
             'topic': exam.topic,
-            'questions': exam.questions
+            'questions': formatted_questions
         })
     
     except Exception as e:
