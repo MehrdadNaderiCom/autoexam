@@ -116,53 +116,54 @@ def get_history():
         logger.error(f"Error retrieving history: {e}")
         return jsonify({'error': 'Failed to retrieve history'}), 500
 
-@app.route('/api/generate', methods=['POST'])
+@app.route('/generate_exam', methods=['POST'])
 def generate_exam():
+    """Generate exam questions based on the given topic."""
     try:
         data = request.get_json()
         topic = data.get('topic')
-        num_questions = min(max(int(data.get('num_questions', 5)), 1), 10)  # Limit between 1 and 10
-        
+        num_questions = int(data.get('num_questions', 5))
+
         if not topic:
             return jsonify({'error': 'Topic is required'}), 400
-        
-        logger.info(f"Fetching content for topic: {topic}")
-        wiki_content = wikipedia_collector.get_topic_content(topic)
-        if not wiki_content:
+
+        # Get content from Wikipedia
+        content = wikipedia_collector.get_topic_content(topic)
+        if not content:
             return jsonify({'error': 'Could not find content for the given topic'}), 404
-        
-        logger.info("Processing content")
-        processed_content = {
-            'text': wiki_content['text'],
-            'url': wiki_content['url']  # Include Wikipedia URL
-        }
-        
-        logger.info(f"Generating {num_questions} questions")
-        questions = question_generator.generate_questions(processed_content, num_questions)
-        
+
+        # Generate questions
+        questions = question_generator.generate_questions(content, num_questions)
         if not questions:
-            return jsonify({'error': 'Could not generate questions from the content'}), 422
-        
-        logger.info("Saving to database")
-        # Save to Exam model
-        exam = Exam(topic=topic, questions=questions)
-        db.session.add(exam)
-        
-        # Also save individual questions to Question model
+            return jsonify({'error': 'Could not generate questions'}), 500
+
+        # Save questions to database
+        saved_questions = []
         for q in questions:
             question = Question(
                 topic=topic,
                 question_text=q['question'],
-                options=str(q.get('options', [])),
+                options=str(q['options']),
                 answer=q['answer'],
-                source_url=q.get('source_url', '')  # Save Wikipedia URL
+                source_url=q.get('source_url', ''),
+                created_at=datetime.utcnow()
             )
             db.session.add(question)
+            saved_questions.append(question)
         
         db.session.commit()
-        
+
+        # Return questions with answers
         return jsonify({
-            'questions': questions
+            'questions': [{
+                'id': q.id,
+                'topic': q.topic,
+                'question': q.question_text,
+                'options': eval(q.options) if q.options else [],
+                'answer': q.answer,
+                'explanation': q.explanation if hasattr(q, 'explanation') else None,
+                'source_url': q.source_url
+            } for q in saved_questions]
         })
     except Exception as e:
         logger.error(f"Error generating exam: {e}")

@@ -144,75 +144,124 @@
 
                 <div id="error" class="alert alert-danger mt-4" style="display: none;"></div>
 
-                <div id="questions" class="mt-4">
-                    <!-- Questions will be inserted here -->
+                <div id="questionsContainer" class="mt-4" style="display: none;">
+                    <div class="card">
+                        <div class="card-body">
+                            <h3 class="card-title mb-4">Generated Questions</h3>
+                            <div id="questions"></div>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
     </div>
 
     <script>
-        document.getElementById('generateForm').addEventListener('submit', async (e) => {
+        document.getElementById('generateForm').onsubmit = async function(e) {
             e.preventDefault();
+            
             const topic = document.getElementById('topic').value;
-            const numQuestions = parseInt(document.getElementById('numQuestions').value);
-            const questionsDiv = document.getElementById('questions');
-            const loading = document.getElementById('loading');
-            const error = document.getElementById('error');
-
-            loading.style.display = 'block';
-            error.style.display = 'none';
-            questionsDiv.innerHTML = '';
-
+            const numQuestions = document.getElementById('numQuestions').value;
+            
+            // Show loading spinner
+            document.getElementById('loadingSpinner').style.display = 'block';
+            document.getElementById('questionsContainer').style.display = 'none';
+            document.getElementById('errorMessage').style.display = 'none';
+            
             try {
-                const response = await fetch('/api/generate', {
+                const response = await fetch('/generate_exam', {
                     method: 'POST',
                     headers: {
-                        'Content-Type': 'application/json',
+                        'Content-Type': 'application/json'
                     },
-                    body: JSON.stringify({ topic, num_questions: numQuestions }),
+                    body: JSON.stringify({
+                        topic: topic,
+                        num_questions: numQuestions
+                    })
                 });
-
+                
                 const data = await response.json();
-
-                if (!response.ok) {
+                
+                if (response.ok) {
+                    const questionsDiv = document.getElementById('questions');
+                    questionsDiv.innerHTML = '';
+                    
+                    data.questions.forEach((q, index) => {
+                        const questionCard = document.createElement('div');
+                        questionCard.className = 'card mb-4';
+                        
+                        let optionsHtml = '';
+                        if (q.options && q.options.length > 0) {
+                            optionsHtml = `
+                                <div class="options-list mt-3">
+                                    ${q.options.map((option, i) => `
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="radio" name="q${index}" id="q${index}o${i}" disabled>
+                                            <label class="form-check-label" for="q${index}o${i}">
+                                                ${option}
+                                            </label>
+                                        </div>
+                                    `).join('')}
+                                </div>
+                            `;
+                        }
+                        
+                        questionCard.innerHTML = `
+                            <div class="card-body">
+                                <h5 class="card-title">Question ${index + 1}</h5>
+                                <p class="card-text">${q.question}</p>
+                                ${optionsHtml}
+                                <div class="answer-section mt-3">
+                                    <button class="btn btn-outline-primary btn-sm toggle-answer" onclick="toggleAnswer(${index})">
+                                        Show Answer
+                                    </button>
+                                    <div class="answer-content mt-2" id="answer${index}" style="display: none;">
+                                        <div class="alert alert-success">
+                                            <strong>Answer:</strong> ${q.answer}
+                                        </div>
+                                        ${q.explanation ? `
+                                            <div class="alert alert-info">
+                                                <strong>Explanation:</strong> ${q.explanation}
+                                            </div>
+                                        ` : ''}
+                                    </div>
+                                </div>
+                                ${q.source_url ? `
+                                    <div class="mt-2">
+                                        <small class="text-muted">
+                                            Source: <a href="${q.source_url}" target="_blank">Wikipedia</a>
+                                        </small>
+                                    </div>
+                                ` : ''}
+                            </div>
+                        `;
+                        
+                        questionsDiv.appendChild(questionCard);
+                    });
+                    
+                    document.getElementById('questionsContainer').style.display = 'block';
+                } else {
                     throw new Error(data.error || 'Failed to generate questions');
                 }
-
-                questionsDiv.innerHTML = data.questions.map((q, index) => `
-                    <div class="question-card mb-4">
-                        <h3>Question ${index + 1}</h3>
-                        <p class="question-text">${q.question}</p>
-                        ${q.options ? `
-                            <div class="options-list">
-                                ${q.options.map((opt, i) => `
-                                    <div class="option">
-                                        <span class="option-letter">${String.fromCharCode(65 + i)}.</span>
-                                        ${opt}
-                                    </div>
-                                `).join('')}
-                            </div>
-                        ` : ''}
-                        <div class="answer-section mt-3">
-                            <button class="btn btn-sm btn-outline-primary toggle-answer" 
-                                    onclick="this.nextElementSibling.classList.toggle('show')">
-                                Show Answer
-                            </button>
-                            <div class="answer-content">
-                                <p><strong>Answer:</strong> ${q.answer}</p>
-                                ${q.explanation ? `<p><strong>Explanation:</strong> ${q.explanation}</p>` : ''}
-                                ${q.source_url ? `<p class="source-link">Source: <a href="${q.source_url}" target="_blank">Wikipedia Article</a></p>` : ''}
-                            </div>
-                        </div>
-                    </div>
-                `).join('');
-            } catch (err) {
-                error.textContent = err.message;
-                error.style.display = 'block';
+            } catch (error) {
+                document.getElementById('errorMessage').textContent = error.message;
+                document.getElementById('errorMessage').style.display = 'block';
             } finally {
-                loading.style.display = 'none';
+                document.getElementById('loadingSpinner').style.display = 'none';
             }
-        });
+        };
+
+        function toggleAnswer(index) {
+            const answerDiv = document.getElementById(`answer${index}`);
+            const button = answerDiv.previousElementSibling;
+            if (answerDiv.style.display === 'none') {
+                answerDiv.style.display = 'block';
+                button.textContent = 'Hide Answer';
+            } else {
+                answerDiv.style.display = 'none';
+                button.textContent = 'Show Answer';
+            }
+        }
     </script>
 </body>
 </html> 

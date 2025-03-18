@@ -71,7 +71,7 @@ class QuestionGenerator:
             
             Make the question professional and meaningful, testing real understanding rather than just memorization."""
 
-            response = openai.ChatCompletion.create(
+            response = openai.chat.completions.create(
                 model="gpt-3.5-turbo",
                 messages=[{"role": "user", "content": prompt}],
                 temperature=0.7,
@@ -91,8 +91,8 @@ class QuestionGenerator:
                     'answer': result['correct_answer'],
                     'explanation': result['explanation']
                 }
-            except:
-                logger.warning("Failed to parse ChatGPT response, falling back to basic question")
+            except Exception as e:
+                logger.warning(f"Failed to parse ChatGPT response: {str(e)}, falling back to basic question")
                 return None
 
         except Exception as e:
