@@ -7,6 +7,7 @@ from collector import wikipedia_collector
 from question_generator import question_generator
 from dotenv import load_dotenv
 import logging
+import nltk
 
 # Load environment variables
 load_dotenv()
@@ -14,6 +15,22 @@ load_dotenv()
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+# Download NLTK data
+try:
+    nltk.data.find('tokenizers/punkt')
+except LookupError:
+    nltk.download('punkt')
+
+try:
+    nltk.data.find('taggers/averaged_perceptron_tagger')
+except LookupError:
+    nltk.download('averaged_perceptron_tagger')
+
+try:
+    nltk.data.find('corpora/stopwords')
+except LookupError:
+    nltk.download('stopwords')
 
 app = Flask(__name__)
 CORS(app)
