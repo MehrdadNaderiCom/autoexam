@@ -4,7 +4,7 @@ from flask_sqlalchemy import SQLAlchemy
 from flask_cors import CORS
 from datetime import datetime
 from collector import wikipedia_collector
-from analyzer import question_generator
+from question_generator import question_generator
 from dotenv import load_dotenv
 import nltk
 
@@ -19,9 +19,7 @@ nltk.download('punkt')
 nltk.download('averaged_perceptron_tagger')
 
 # Database configuration
-app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL', 'sqlite:///exams.db')
-if app.config['SQLALCHEMY_DATABASE_URI'].startswith("postgres://"):
-    app.config['SQLALCHEMY_DATABASE_URI'] = app.config['SQLALCHEMY_DATABASE_URI'].replace("postgres://", "postgresql://", 1)
+app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL', '').replace('postgres://', 'postgresql://') or 'sqlite:///exam.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 db = SQLAlchemy(app)
@@ -36,7 +34,7 @@ class Exam(db.Model):
 def home():
     return render_template('index.html')
 
-@app.route('/api/generate', methods=['POST'])
+@app.route('/generate', methods=['POST'])
 def generate_exam():
     data = request.get_json()
     topic = data.get('topic')
@@ -45,22 +43,19 @@ def generate_exam():
         return jsonify({'error': 'Topic is required'}), 400
     
     try:
-        # Fetch Wikipedia content
-        wiki_content = wikipedia_collector.get_topic_content(topic)
-        if not wiki_content:
-            return jsonify({'error': 'Could not find Wikipedia content for the given topic'}), 404
+        # Fetch content from Wikipedia
+        content = wikipedia_collector.get_topic_content(topic)
+        if not content:
+            return jsonify({'error': 'Could not find content for the given topic'}), 404
         
-        # Process content into chunks suitable for question generation
-        text_chunks = wikipedia_collector.process_content(wiki_content)
+        # Process the content
+        processed_content = wikipedia_collector.process_content(content)
         
         # Generate questions
-        questions = question_generator.generate_questions(text_chunks)
+        questions = question_generator.generate_questions(processed_content)
         
         # Save to database
-        exam = Exam(
-            topic=topic,
-            questions=questions
-        )
+        exam = Exam(topic=topic, questions=questions)
         db.session.add(exam)
         db.session.commit()
         
@@ -69,12 +64,11 @@ def generate_exam():
             'topic': exam.topic,
             'questions': exam.questions
         })
-        
+    
     except Exception as e:
-        app.logger.error(f"Error generating exam: {str(e)}")
-        return jsonify({'error': 'Failed to generate exam'}), 500
+        return jsonify({'error': str(e)}), 500
 
-@app.route('/api/exams/<int:exam_id>', methods=['GET'])
+@app.route('/exam/<int:exam_id>', methods=['GET'])
 def get_exam(exam_id):
     exam = Exam.query.get_or_404(exam_id)
     return jsonify({
