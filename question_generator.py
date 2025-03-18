@@ -3,7 +3,6 @@ import random
 import nltk
 import logging
 import openai
-from openai import OpenAI
 from typing import List, Dict, Union
 
 # Set up logging
@@ -65,13 +64,8 @@ class QuestionGenerator:
                 logger.error("Invalid OpenAI API key format")
                 return None
 
-            # Initialize OpenAI client with minimal configuration
-            client = OpenAI(
-                api_key=api_key,
-                base_url="https://api.openai.com/v1",
-                timeout=60.0,
-                max_retries=2
-            )
+            # Set the API key
+            openai.api_key = api_key
 
             # Clean and validate the sentence
             sentence = sentence.strip()
@@ -99,7 +93,7 @@ Format your response as a JSON object with these exact fields:
 }}"""
 
             try:
-                response = client.chat.completions.create(
+                response = openai.ChatCompletion.create(
                     model="gpt-3.5-turbo",
                     messages=[
                         {"role": "system", "content": "You are a professional exam question creator."},
@@ -109,13 +103,13 @@ Format your response as a JSON object with these exact fields:
                     max_tokens=500
                 )
                 logger.info("Successfully received response from ChatGPT")
-            except openai.AuthenticationError as e:
+            except openai.error.AuthenticationError as e:
                 logger.error(f"OpenAI API authentication failed: {str(e)}")
                 return None
-            except openai.RateLimitError as e:
+            except openai.error.RateLimitError as e:
                 logger.error(f"OpenAI API rate limit exceeded: {str(e)}")
                 return None
-            except openai.APIError as e:
+            except openai.error.APIError as e:
                 logger.error(f"OpenAI API error: {str(e)}")
                 return None
             except Exception as e:
