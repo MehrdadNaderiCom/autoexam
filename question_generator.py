@@ -1,17 +1,44 @@
+import os
 import random
 import nltk
+import logging
 from nltk.tokenize import sent_tokenize, word_tokenize
 from nltk.tag import pos_tag
 from nltk.corpus import stopwords
 from typing import List, Dict, Union
 
+# Set up logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+# Set up NLTK data directory
+nltk_data_dir = os.path.join(os.getcwd(), 'nltk_data')
+if not os.path.exists(nltk_data_dir):
+    os.makedirs(nltk_data_dir)
+nltk.data.path.append(nltk_data_dir)
+
+def download_nltk_data():
+    """Download required NLTK data packages."""
+    required_packages = ['punkt', 'averaged_perceptron_tagger', 'stopwords']
+    for package in required_packages:
+        try:
+            nltk.data.find(f'tokenizers/{package}')
+            logger.info(f"Package {package} is already downloaded")
+        except LookupError:
+            try:
+                nltk.download(package, download_dir=nltk_data_dir, quiet=True)
+                logger.info(f"Successfully downloaded {package}")
+            except Exception as e:
+                logger.error(f"Error downloading {package}: {str(e)}")
+                raise
+
+# Download NLTK data at module level
+download_nltk_data()
+
 class QuestionGenerator:
     def __init__(self):
-        # Download required NLTK data
-        nltk.download('punkt')
-        nltk.download('averaged_perceptron_tagger')
-        nltk.download('stopwords')
-        self.stop_words = set(stopwords.words('english'))
+        # No need to download NLTK data here since it's done at module level
+        pass
 
     def generate_questions(self, content: str, num_questions: int = 10) -> List[Dict[str, Union[str, List[str]]]]:
         """
