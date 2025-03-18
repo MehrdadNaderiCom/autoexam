@@ -123,21 +123,29 @@ def generate_exam():
         data = request.get_json()
         topic = data.get('topic')
         num_questions = int(data.get('num_questions', 5))
+        
+        logger.info(f"Received request to generate {num_questions} questions for topic: {topic}")
 
         if not topic:
+            logger.warning("No topic provided in request")
             return jsonify({'error': 'Topic is required'}), 400
 
         # Get content from Wikipedia
+        logger.info("Fetching content from Wikipedia")
         content = wikipedia_collector.get_topic_content(topic)
         if not content:
+            logger.warning(f"No Wikipedia content found for topic: {topic}")
             return jsonify({'error': 'Could not find content for the given topic'}), 404
 
         # Generate questions
+        logger.info("Generating questions")
         questions = question_generator.generate_questions(content, num_questions)
         if not questions:
+            logger.warning("Failed to generate questions")
             return jsonify({'error': 'Could not generate questions'}), 500
 
         # Save questions to database
+        logger.info("Saving questions to database")
         saved_questions = []
         for q in questions:
             question = Question(
@@ -152,6 +160,7 @@ def generate_exam():
             saved_questions.append(question)
         
         db.session.commit()
+        logger.info(f"Successfully generated and saved {len(saved_questions)} questions")
 
         # Return questions with answers
         return jsonify({
@@ -166,7 +175,7 @@ def generate_exam():
             } for q in saved_questions]
         })
     except Exception as e:
-        logger.error(f"Error generating exam: {e}")
+        logger.error(f"Error generating exam: {str(e)}", exc_info=True)
         return jsonify({'error': str(e)}), 500
 
 @app.route('/exam/<int:exam_id>', methods=['GET'])

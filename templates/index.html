@@ -135,15 +135,18 @@
                     <button type="submit" class="btn btn-primary">Generate Questions</button>
                 </form>
 
-                <div id="loading" class="text-center mt-4" style="display: none;">
+                <!-- Loading spinner -->
+                <div id="loadingSpinner" class="text-center mt-4" style="display: none;">
                     <div class="spinner-border text-primary" role="status">
                         <span class="visually-hidden">Loading...</span>
                     </div>
                     <p class="mt-2">Generating questions... This may take a moment.</p>
                 </div>
 
-                <div id="error" class="alert alert-danger mt-4" style="display: none;"></div>
+                <!-- Error message -->
+                <div id="errorMessage" class="alert alert-danger mt-4" style="display: none;"></div>
 
+                <!-- Question display section -->
                 <div id="questionsContainer" class="mt-4" style="display: none;">
                     <div class="card">
                         <div class="card-body">
@@ -163,7 +166,7 @@
             const topic = document.getElementById('topic').value;
             const numQuestions = document.getElementById('numQuestions').value;
             
-            // Show loading spinner
+            // Show loading spinner and hide other elements
             document.getElementById('loadingSpinner').style.display = 'block';
             document.getElementById('questionsContainer').style.display = 'none';
             document.getElementById('errorMessage').style.display = 'none';
@@ -176,7 +179,7 @@
                     },
                     body: JSON.stringify({
                         topic: topic,
-                        num_questions: numQuestions
+                        num_questions: parseInt(numQuestions)
                     })
                 });
                 

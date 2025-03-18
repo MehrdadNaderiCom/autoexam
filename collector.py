@@ -1,4 +1,4 @@
-import wikipediaapi
+import wikipedia
 import logging
 import nltk
 import os
@@ -11,12 +11,9 @@ logger = logging.getLogger(__name__)
 
 class WikipediaCollector:
     def __init__(self):
-        """Initialize the Wikipedia collector."""
-        self.wiki = wikipediaapi.Wikipedia(
-            'AutoExam/1.0 (mnade@example.com)',
-            'en',
-            extract_format=wikipediaapi.ExtractFormat.WIKI
-        )
+        """Initialize the WikipediaCollector."""
+        logger.info("Initializing WikipediaCollector")
+        wikipedia.set_lang('en')
         self.use_nltk = True
         try:
             nltk.data.find('tokenizers/punkt')
@@ -28,24 +25,36 @@ class WikipediaCollector:
     def get_topic_content(self, topic: str) -> Optional[Dict[str, str]]:
         """Get content from Wikipedia for a given topic."""
         try:
-            # First try to get the exact page
-            page = self.wiki.page(topic)
+            logger.info(f"Searching Wikipedia for topic: {topic}")
+            # Search for the topic
+            search_results = wikipedia.search(topic)
+            if not search_results:
+                logger.warning(f"No Wikipedia results found for topic: {topic}")
+                return None
+
+            # Get the page for the first result
+            page_title = search_results[0]
+            logger.info(f"Found Wikipedia page: {page_title}")
             
-            if not page.exists():
-                logger.warning(f"Page not found for topic: {topic}")
+            try:
+                page = wikipedia.page(page_title)
+            except wikipedia.exceptions.DisambiguationError as e:
+                logger.info(f"Disambiguation page found, using first option: {e.options[0]}")
+                page = wikipedia.page(e.options[0])
+            except wikipedia.exceptions.PageError:
+                logger.warning(f"Wikipedia page not found for: {page_title}")
                 return None
 
             # Get the content and URL
             content = {
-                'text': page.text,
-                'url': page.fullurl,
-                'title': page.title
+                'text': page.content,
+                'url': page.url
             }
-            
+            logger.info(f"Successfully retrieved content from Wikipedia, URL: {page.url}")
             return content
 
         except Exception as e:
-            logger.error(f"Error fetching Wikipedia content: {e}")
+            logger.error(f"Error getting Wikipedia content: {str(e)}", exc_info=True)
             return None
 
     def process_content(self, content: str) -> str:
