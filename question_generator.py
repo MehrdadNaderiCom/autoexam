@@ -102,10 +102,13 @@ Format your response as a JSON object with these exact fields:
                     max_tokens=500
                 )
                 logger.info("Successfully received response from ChatGPT")
-            except openai.error.AuthenticationError as e:
+            except openai.AuthenticationError as e:
                 logger.error(f"OpenAI API authentication failed: {str(e)}")
                 return None
-            except openai.error.APIError as e:
+            except openai.RateLimitError as e:
+                logger.error(f"OpenAI API rate limit exceeded: {str(e)}")
+                return None
+            except openai.APIError as e:
                 logger.error(f"OpenAI API error: {str(e)}")
                 return None
             except Exception as e:
