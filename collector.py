@@ -32,26 +32,33 @@ class WikipediaCollector:
                 logger.warning(f"No Wikipedia results found for topic: {topic}")
                 return None
 
-            # Get the page for the first result
-            page_title = search_results[0]
-            logger.info(f"Found Wikipedia page: {page_title}")
-            
-            try:
-                page = wikipedia.page(page_title)
-            except wikipedia.exceptions.DisambiguationError as e:
-                logger.info(f"Disambiguation page found, using first option: {e.options[0]}")
-                page = wikipedia.page(e.options[0])
-            except wikipedia.exceptions.PageError:
-                logger.warning(f"Wikipedia page not found for: {page_title}")
-                return None
+            # Try each search result until we find a valid page
+            for page_title in search_results[:3]:  # Try first 3 results
+                try:
+                    page = wikipedia.page(page_title, auto_suggest=False)
+                    content = page.content
+                    if not content:
+                        continue
 
-            # Get the content and URL
-            content = {
-                'text': page.content,
-                'url': page.url
-            }
-            logger.info(f"Successfully retrieved content from Wikipedia, URL: {page.url}")
-            return content
+                    # Process the content
+                    processed_content = self.process_content(content)
+                    if not processed_content:
+                        continue
+
+                    return {
+                        'text': processed_content,
+                        'url': page.url
+                    }
+
+                except (wikipedia.exceptions.DisambiguationError, wikipedia.exceptions.PageError) as e:
+                    logger.warning(f"Error with page {page_title}: {str(e)}")
+                    continue
+                except Exception as e:
+                    logger.error(f"Unexpected error with page {page_title}: {str(e)}")
+                    continue
+
+            logger.warning(f"No suitable content found for any of the search results for topic: {topic}")
+            return None
 
         except Exception as e:
             logger.error(f"Error getting Wikipedia content: {str(e)}", exc_info=True)
@@ -62,30 +69,50 @@ class WikipediaCollector:
         if not content:
             return ""
 
-        # Basic content cleaning
-        lines = content.split('\n')
-        processed_lines = []
+        try:
+            # Split content into sections and take the introduction and first few relevant sections
+            sections = content.split('\n\n')
+            processed_sections = []
+            
+            for section in sections[:10]:  # Look at first 10 sections
+                # Skip empty sections, references, and sections with special formatting
+                if not section.strip() or \
+                   section.startswith('==') or \
+                   '[' in section or \
+                   '|' in section or \
+                   '{' in section:
+                    continue
+                
+                # Clean the section
+                cleaned_section = section.replace('\n', ' ').strip()
+                if len(cleaned_section.split()) > 5:  # Only keep meaningful sections
+                    processed_sections.append(cleaned_section)
+                
+                # Stop if we have enough content
+                if len(processed_sections) >= 3:
+                    break
 
-        for line in lines:
-            # Skip empty lines and references
-            if not line.strip() or line.startswith('==') or '[' in line:
-                continue
-            processed_lines.append(line)
+            if not processed_sections:
+                return ""
 
-        processed_content = ' '.join(processed_lines)
+            processed_content = ' '.join(processed_sections)
 
-        # Use NLTK for sentence tokenization if available
-        if self.use_nltk:
-            try:
-                sentences = nltk.sent_tokenize(processed_content)
-                # Keep only sentences that are likely to be informative
-                sentences = [s for s in sentences if len(s.split()) > 5]
-                return ' '.join(sentences)
-            except Exception as e:
-                logger.warning(f"NLTK processing failed: {str(e)}")
+            # Use NLTK for sentence tokenization if available
+            if self.use_nltk:
+                try:
+                    sentences = nltk.sent_tokenize(processed_content)
+                    # Keep only sentences that are likely to be informative
+                    sentences = [s for s in sentences if len(s.split()) > 5 and len(s.split()) < 50]
+                    return ' '.join(sentences)
+                except Exception as e:
+                    logger.warning(f"NLTK processing failed: {str(e)}")
 
-        # Fallback to basic processing
-        return processed_content
+            # Fallback to basic processing
+            return processed_content
+
+        except Exception as e:
+            logger.error(f"Error processing content: {str(e)}")
+            return ""
 
 # Initialize the collector
 wikipedia_collector = WikipediaCollector() 

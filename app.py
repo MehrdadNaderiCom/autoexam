@@ -137,55 +137,61 @@ def generate_exam():
         # Get content from Wikipedia
         logger.info("Fetching content from Wikipedia")
         content = wikipedia_collector.get_topic_content(topic)
-        if not content:
+        if not content or not content.get('text'):
             logger.warning(f"No Wikipedia content found for topic: {topic}")
-            return jsonify({'error': 'Could not find content for the given topic'}), 404
+            return jsonify({'error': f'Could not find Wikipedia content for "{topic}". Please try a different topic or rephrase your search.'}), 404
 
         # Generate questions
         logger.info("Generating questions")
         questions = question_generator.generate_questions(content, num_questions)
         if not questions:
             logger.warning("Failed to generate questions")
-            return jsonify({'error': 'Could not generate questions'}), 500
+            return jsonify({'error': 'Could not generate questions from the content. Please try a different topic.'}), 500
 
         # Store questions in the database
         stored_questions = []
-        for q in questions:
-            question = Question(
-                topic=topic,
-                question_text=q['question'],
-                question_type=q['type'],
-                options=str(q.get('options', [])),
-                answer=q['answer'],
-                explanation=q.get('explanation', ''),
-                source_url=q.get('source_url', '')
-            )
-            db.session.add(question)
-            stored_questions.append(question.to_dict())
-
-        # Store the exam
-        exam = Exam(
-            topic=topic,
-            questions=stored_questions
-        )
-        db.session.add(exam)
-        
         try:
+            for q in questions:
+                question = Question(
+                    topic=topic,
+                    question_text=q['question'],
+                    question_type=q['type'],
+                    options=str(q.get('options', [])),
+                    answer=q['answer'],
+                    explanation=q.get('explanation', ''),
+                    source_url=q.get('source_url', '')
+                )
+                db.session.add(question)
+                stored_questions.append(question.to_dict())
+
+            # Store the exam
+            exam = Exam(
+                topic=topic,
+                questions=stored_questions
+            )
+            db.session.add(exam)
             db.session.commit()
             logger.info("Successfully stored questions and exam in database")
+
         except Exception as e:
             db.session.rollback()
             logger.error(f"Failed to store questions in database: {str(e)}")
-            # Continue anyway - we can still return the generated questions
+            # Return the generated questions even if database storage fails
+            return jsonify({
+                'questions': questions,  # Return the original questions if db storage fails
+                'warning': 'Questions were generated but could not be saved to history.'
+            })
 
         return jsonify({
             'questions': stored_questions,
-            'exam_id': exam.id if exam else None
+            'exam_id': exam.id
         })
 
     except Exception as e:
         logger.error(f"Error in generate_exam: {str(e)}")
-        return jsonify({'error': str(e)}), 500
+        return jsonify({
+            'error': 'An error occurred while generating questions. Please try again with a different topic.'
+        }), 500
 
 @app.route('/exam/<int:exam_id>', methods=['GET'])
 def get_exam(exam_id):
