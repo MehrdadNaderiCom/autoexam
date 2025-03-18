@@ -1,6 +1,12 @@
 import wikipediaapi
 import nltk
+import logging
+import os
 from typing import Dict, List, Optional, Union
+
+# Set up logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 class WikipediaCollector:
     def __init__(self):
@@ -10,11 +16,23 @@ class WikipediaCollector:
             user_agent='AutoExam/1.0 (mnade@example.com)'
         )
         
+        # Ensure NLTK data directory exists
+        nltk_data_dir = os.path.join(os.getcwd(), 'nltk_data')
+        os.makedirs(nltk_data_dir, exist_ok=True)
+        nltk.data.path.append(nltk_data_dir)
+        
         # Download required NLTK data
+        self._ensure_nltk_data()
+
+    def _ensure_nltk_data(self):
+        """Ensure required NLTK data is downloaded."""
         try:
             nltk.data.find('tokenizers/punkt')
+            logger.info("Found existing punkt data")
         except LookupError:
-            nltk.download('punkt')
+            logger.info("Downloading punkt...")
+            nltk.download('punkt', quiet=True)
+            logger.info("Successfully downloaded punkt")
 
     def get_topic_content(self, topic: str) -> Dict[str, str]:
         """
