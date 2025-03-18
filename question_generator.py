@@ -19,7 +19,15 @@ class QuestionGenerator:
         if not os.path.exists(self.nltk_data_dir):
             os.makedirs(self.nltk_data_dir, exist_ok=True)
         nltk.data.path.append(self.nltk_data_dir)
-        self._ensure_nltk_data()
+        
+        # Try to ensure NLTK data is available
+        try:
+            self._ensure_nltk_data()
+        except Exception as e:
+            logger.warning(f"Failed to download NLTK data: {e}. Will use basic tokenization.")
+            self.use_basic_tokenization = True
+        else:
+            self.use_basic_tokenization = False
         
         # Load spaCy model
         try:
@@ -40,8 +48,25 @@ class QuestionGenerator:
                 logger.info(f"Found existing {package} data")
             except LookupError:
                 logger.info(f"Downloading {package}...")
-                nltk.download(package, quiet=True)
+                nltk.download(package, quiet=True, download_dir=self.nltk_data_dir)
                 logger.info(f"Successfully downloaded {package}")
+
+    def _basic_tokenize(self, text: str) -> List[str]:
+        """Basic sentence tokenization when NLTK data is not available."""
+        # Split on common sentence endings
+        sentences = []
+        current = []
+        
+        for word in text.split():
+            current.append(word)
+            if word.endswith(('.', '!', '?')) and len(word) > 1:
+                sentences.append(' '.join(current))
+                current = []
+        
+        if current:  # Add any remaining text
+            sentences.append(' '.join(current))
+        
+        return sentences
 
     def _generate_question_from_text(self, sentence: str) -> Dict[str, Union[str, List[str]]]:
         """Generate a question-answer pair from the given sentence."""
@@ -50,6 +75,13 @@ class QuestionGenerator:
             
             # Extract key information
             entities = [(ent.text, ent.label_) for ent in doc.ents]
+            
+            if not entities:
+                # If no entities found, try to generate a question about the subject
+                for token in doc:
+                    if token.dep_ == 'nsubj':
+                        entities = [(token.text, 'SUBJECT')]
+                        break
             
             if not entities:
                 return None
@@ -74,6 +106,10 @@ class QuestionGenerator:
                 'GPE': [
                     f"What is significant about {entity}?",
                     f"Where is {entity} located?",
+                ],
+                'SUBJECT': [
+                    f"What about {entity}?",
+                    f"Can you explain what {entity} does in this context?",
                 ],
                 'DEFAULT': [
                     f"What is {entity}?",
@@ -122,7 +158,10 @@ class QuestionGenerator:
             List[Dict]: List of questions with their answers
         """
         # Split content into sentences
-        sentences = sent_tokenize(content)
+        if self.use_basic_tokenization:
+            sentences = self._basic_tokenize(content)
+        else:
+            sentences = sent_tokenize(content)
         
         # Filter out short sentences and those that might not be informative
         valid_sentences = [
