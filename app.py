@@ -196,64 +196,6 @@ def health_check():
             'error': str(e)
         }), 500
 
-@app.route('/generate', methods=['POST'])
-def generate_questions():
-    """Generate questions from Wikipedia content."""
-    try:
-        data = request.get_json()
-        topic = data.get('topic')
-        num_questions = int(data.get('num_questions', 5))
-        
-        if not topic:
-            return jsonify({'error': 'Topic is required'}), 400
-        
-        # Search Wikipedia
-        try:
-            # First try to get the exact page
-            page = wikipedia.page(topic)
-        except wikipedia.exceptions.DisambiguationError as e:
-            # If disambiguation error, use the first option
-            page = wikipedia.page(e.options[0])
-        except wikipedia.exceptions.PageError:
-            return jsonify({'error': 'Topic not found on Wikipedia'}), 404
-        
-        # Generate questions
-        questions = question_generator.generate_questions(page.content, num_questions)
-        
-        # Store questions in database
-        for q in questions:
-            question = Question(
-                topic=topic,
-                question_text=q['question'],
-                options=str(q['options']),  # Convert list to string for storage
-                answer=q['answer']
-            )
-            db.session.add(question)
-        
-        db.session.commit()
-        
-        return jsonify({
-            'questions': questions,
-            'topic': topic,
-            'wikipedia_url': page.url
-        })
-        
-    except Exception as e:
-        logger.error(f"Error generating questions: {str(e)}")
-        return jsonify({'error': str(e)}), 500
-
-@app.route('/history')
-def get_history():
-    """Get all previously generated questions."""
-    try:
-        questions = Question.query.order_by(Question.created_at.desc()).all()
-        return jsonify({
-            'questions': [q.to_dict() for q in questions]
-        })
-    except Exception as e:
-        logger.error(f"Error fetching history: {str(e)}")
-        return jsonify({'error': str(e)}), 500
-
 @app.route('/delete/<int:question_id>', methods=['DELETE'])
 def delete_question(question_id):
     """Delete a specific question."""

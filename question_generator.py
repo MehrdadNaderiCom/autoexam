@@ -141,6 +141,9 @@ class QuestionGenerator:
                         questions.append(question)
             
             return questions if questions else None
+        except Exception as e:
+            logger.error(f"Error in generate_questions: {e}")
+            return None
 
 # Initialize the question generator
 question_generator = QuestionGenerator() 
