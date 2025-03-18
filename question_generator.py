@@ -62,7 +62,7 @@ class QuestionGenerator:
                 return None
 
             # Validate API key format
-            if not openai.api_key.startswith('sk-'):
+            if not (openai.api_key.startswith('sk-') or openai.api_key.startswith('sk-proj-')):
                 logger.error("Invalid OpenAI API key format")
                 return None
 
