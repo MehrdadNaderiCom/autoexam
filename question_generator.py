@@ -3,6 +3,7 @@ import random
 import nltk
 import logging
 import openai
+from openai import OpenAI
 from typing import List, Dict, Union
 
 # Set up logging
@@ -10,7 +11,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Configure OpenAI
-openai.api_key = os.getenv('OPENAI_API_KEY')
+client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
 
 class QuestionGenerator:
     def __init__(self):
@@ -57,12 +58,13 @@ class QuestionGenerator:
     def _enhance_with_chatgpt(self, sentence: str, keyword: str) -> Dict[str, Union[str, List[str]]]:
         """Use ChatGPT to create a multiple-choice question."""
         try:
-            if not openai.api_key:
+            api_key = os.getenv('OPENAI_API_KEY')
+            if not api_key:
                 logger.warning("OpenAI API key not found")
                 return None
 
             # Validate API key format
-            if not (openai.api_key.startswith('sk-') or openai.api_key.startswith('sk-proj-')):
+            if not (api_key.startswith('sk-') or api_key.startswith('sk-proj-')):
                 logger.error("Invalid OpenAI API key format")
                 return None
 
@@ -92,7 +94,7 @@ Format your response as a JSON object with these exact fields:
 }}"""
 
             try:
-                response = openai.chat.completions.create(
+                response = client.chat.completions.create(
                     model="gpt-3.5-turbo",
                     messages=[
                         {"role": "system", "content": "You are a professional exam question creator."},
