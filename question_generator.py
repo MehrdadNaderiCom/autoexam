@@ -61,6 +61,11 @@ class QuestionGenerator:
                 logger.warning("OpenAI API key not found")
                 return None
 
+            # Validate API key format
+            if not openai.api_key.startswith('sk-'):
+                logger.error("Invalid OpenAI API key format")
+                return None
+
             prompt = f"""Create a high-quality multiple-choice question based on this text: "{sentence}"
 
 Focus on testing understanding of key concepts, especially around "{keyword}".
@@ -80,12 +85,23 @@ Format your response as a JSON object with these exact fields:
     "explanation": "A brief explanation of why this is the correct answer"
 }}"""
 
-            response = openai.chat.completions.create(
-                model="gpt-3.5-turbo",
-                messages=[{"role": "user", "content": prompt}],
-                temperature=0.7,
-                max_tokens=500
-            )
+            try:
+                response = openai.chat.completions.create(
+                    model="gpt-3.5-turbo",
+                    messages=[{"role": "user", "content": prompt}],
+                    temperature=0.7,
+                    max_tokens=500
+                )
+                logger.info("Successfully received response from ChatGPT")
+            except openai.error.AuthenticationError as e:
+                logger.error(f"OpenAI API authentication failed: {str(e)}")
+                return None
+            except openai.error.APIError as e:
+                logger.error(f"OpenAI API error: {str(e)}")
+                return None
+            except Exception as e:
+                logger.error(f"Unexpected error calling OpenAI API: {str(e)}")
+                return None
 
             # Parse the response
             content = response.choices[0].message.content
@@ -101,11 +117,12 @@ Format your response as a JSON object with these exact fields:
                     'explanation': result['explanation']
                 }
             except Exception as e:
-                logger.warning(f"Failed to parse ChatGPT response: {str(e)}")
+                logger.error(f"Failed to parse ChatGPT response: {str(e)}")
+                logger.error(f"Raw response content: {content}")
                 return None
 
         except Exception as e:
-            logger.warning(f"ChatGPT enhancement failed: {str(e)}")
+            logger.error(f"ChatGPT enhancement failed: {str(e)}")
             return None
 
     def _generate_basic_question(self, sentence: str, keyword: str) -> Dict[str, Union[str, List[str]]]:
