@@ -62,6 +62,15 @@ class Exam(db.Model):
     questions = db.Column(db.JSON, nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
+    def to_dict(self):
+        """Convert exam to dictionary."""
+        return {
+            'id': self.id,
+            'topic': self.topic,
+            'questions': self.questions,
+            'created_at': self.created_at.isoformat() if self.created_at else None
+        }
+
 class Question(db.Model):
     """Model for storing individual questions."""
     id = db.Column(db.Integer, primary_key=True)
@@ -110,12 +119,7 @@ def history_page():
 def get_history():
     try:
         exams = Exam.query.order_by(Exam.created_at.desc()).all()
-        return jsonify([{
-            'id': exam.id,
-            'topic': exam.topic,
-            'questions': exam.questions,
-            'created_at': exam.created_at.isoformat()
-        } for exam in exams])
+        return jsonify([exam.to_dict() for exam in exams])
     except Exception as e:
         logger.error(f"Error retrieving history: {e}")
         return jsonify({'error': 'Failed to retrieve history'}), 500
@@ -162,12 +166,12 @@ def generate_exam():
                     source_url=q.get('source_url', '')
                 )
                 db.session.add(question)
-                stored_questions.append(question.to_dict())
+                stored_questions.append(q)  # Store the original question dict
 
-            # Store the exam
+            # Store the exam with the original question dictionaries
             exam = Exam(
                 topic=topic,
-                questions=stored_questions
+                questions=stored_questions  # Store the list of question dictionaries directly
             )
             db.session.add(exam)
             db.session.commit()
@@ -178,7 +182,7 @@ def generate_exam():
             logger.error(f"Failed to store questions in database: {str(e)}")
             # Return the generated questions even if database storage fails
             return jsonify({
-                'questions': questions,  # Return the original questions if db storage fails
+                'questions': questions,
                 'warning': 'Questions were generated but could not be saved to history.'
             })
 
