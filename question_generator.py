@@ -65,8 +65,13 @@ class QuestionGenerator:
                 logger.error("Invalid OpenAI API key format")
                 return None
 
-            # Initialize OpenAI client
-            client = OpenAI(api_key=api_key)
+            # Initialize OpenAI client with minimal configuration
+            client = OpenAI(
+                api_key=api_key,
+                base_url="https://api.openai.com/v1",
+                timeout=60.0,
+                max_retries=2
+            )
 
             # Clean and validate the sentence
             sentence = sentence.strip()
