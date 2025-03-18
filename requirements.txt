@@ -8,4 +8,5 @@ requests==2.31.0
 wikipedia-api==0.6.0
 nltk==3.8.1
 Werkzeug==2.0.1
-SQLAlchemy==1.4.23 
+SQLAlchemy==1.4.23
+wikipedia==1.4.0 

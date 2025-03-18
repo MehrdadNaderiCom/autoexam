@@ -72,6 +72,16 @@ class Question(db.Model):
             'created_at': self.created_at.isoformat()
         }
 
+# Create database tables
+def init_db():
+    with app.app_context():
+        try:
+            db.create_all()
+            logger.info("Database initialized successfully")
+        except Exception as e:
+            logger.error(f"Error initializing database: {e}")
+            raise
+
 @app.route('/')
 def home():
     return render_template('index.html')
@@ -231,7 +241,9 @@ def delete_question(question_id):
         logger.error(f"Error deleting question: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
+# Initialize database when the app starts
+init_db()
+
 if __name__ == '__main__':
-    with app.app_context():
-        db.create_all()
-    app.run(debug=True) 
+    port = int(os.environ.get('PORT', 5000))
+    app.run(host='0.0.0.0', port=port) 
