@@ -12,7 +12,13 @@ class QuestionGenerator:
     def __init__(self):
         """Initialize the QuestionGenerator."""
         self.use_basic_tokenization = True
-        logger.info("QuestionGenerator initialized with basic tokenization")
+        try:
+            nltk.data.find('tokenizers/punkt')
+            nltk.data.find('tokenizers/averaged_perceptron_tagger')
+            self.use_basic_tokenization = False
+            logger.info("NLTK data found, using advanced tokenization")
+        except LookupError:
+            logger.info("NLTK data not found, using basic tokenization")
 
     def _basic_tokenize(self, text: str) -> List[str]:
         """Basic sentence tokenization."""
@@ -21,94 +27,71 @@ class QuestionGenerator:
         sentences = text.split('|')
         return [s.strip() for s in sentences if s.strip()]
 
-    def _generate_question_from_text(self, sentence: str) -> Dict[str, Union[str, List[str]]]:
-        """Generate a question-answer pair from the given sentence."""
+    def _tokenize_text(self, text: str) -> List[str]:
+        """Tokenize text into sentences using either NLTK or basic tokenization."""
         try:
-            # Simple word-based approach
-            words = sentence.split()
-            
-            # Find important words (longer words are often more important)
-            important_words = [w for w in words if len(w) > 4]
-            
-            if not important_words:
-                return None
-            
-            # Choose a random important word
-            target_word = random.choice(important_words)
-            
-            # Generate question templates
-            templates = [
-                f"What is the significance of '{target_word}' in this context?",
-                f"Can you explain what '{target_word}' means here?",
-                f"What role does '{target_word}' play in this statement?"
-            ]
-            
-            question = random.choice(templates)
-            
-            # Generate distractors
-            distractors = []
-            other_words = [w for w in important_words if w != target_word]
-            
-            if other_words:
-                distractors.extend(random.sample(other_words, min(2, len(other_words))))
-            
-            while len(distractors) < 3:
-                distractor = f"Not related to {target_word}"
-                if distractor not in distractors:
-                    distractors.append(distractor)
-            
-            options = distractors + [sentence]
-            random.shuffle(options)
-            
-            return {
-                'type': 'multiple_choice',
-                'question': question,
-                'options': options,
-                'answer': sentence
-            }
-            
+            if not self.use_basic_tokenization:
+                return nltk.sent_tokenize(text)
         except Exception as e:
-            logger.error(f"Error generating question: {str(e)}")
-            return None
+            logger.warning(f"NLTK tokenization failed: {str(e)}")
+        return self._basic_tokenize(text)
 
-    def generate_questions(self, content: str, num_questions: int = 5) -> List[Dict[str, Union[str, List[str]]]]:
-        """
-        Generate questions from the given content.
+    def _extract_keywords(self, sentence: str) -> List[str]:
+        """Extract potential keywords from a sentence."""
+        try:
+            if not self.use_basic_tokenization:
+                words = nltk.word_tokenize(sentence)
+                pos_tags = nltk.pos_tag(words)
+                return [word for word, pos in pos_tags if pos.startswith(('NN', 'VB', 'JJ'))]
+        except Exception as e:
+            logger.warning(f"NLTK keyword extraction failed: {str(e)}")
         
-        Args:
-            content (str): The text content to generate questions from
-            num_questions (int): Number of questions to generate
-            
-        Returns:
-            List[Dict]: List of questions with their answers
-        """
-        # Split content into sentences
-        sentences = self._basic_tokenize(content)
-        
-        # Filter out short sentences and those that might not be informative
-        valid_sentences = [
-            sent for sent in sentences 
-            if len(sent.split()) > 8 and  # Minimum word count
-            not any(x in sent.lower() for x in ['copyright', 'all rights reserved', 'http', 'www'])
-        ]
-        
-        # Generate questions
+        # Fallback: return words with 4 or more characters
+        words = sentence.split()
+        return [word for word in words if len(word) >= 4 and word.isalnum()]
+
+    def generate_questions(self, text: str, num_questions: int = 5) -> List[Dict]:
+        """Generate a list of questions from the given text."""
         questions = []
-        attempts = 0
-        max_attempts = num_questions * 2  # Allow for some failures
+        sentences = self._tokenize_text(text)
         
-        while len(questions) < num_questions and attempts < max_attempts and valid_sentences:
-            # Select a random sentence that hasn't been used yet
-            sentence = random.choice(valid_sentences)
-            valid_sentences.remove(sentence)  # Avoid reusing the same sentence
-            
-            question_data = self._generate_question_from_text(sentence)
-            if question_data:
-                questions.append(question_data)
-            
-            attempts += 1
+        if not sentences:
+            return questions
+
+        # Try to generate twice as many questions as requested
+        attempts = min(len(sentences), num_questions * 2)
+        used_sentences = set()
+
+        while len(questions) < num_questions and attempts > 0:
+            sentence = random.choice(sentences)
+            if sentence in used_sentences:
+                attempts -= 1
+                continue
+
+            used_sentences.add(sentence)
+            keywords = self._extract_keywords(sentence)
+
+            if keywords:
+                keyword = random.choice(keywords)
+                question = self._generate_question(sentence, keyword)
+                if question:
+                    questions.append(question)
+
+            attempts -= 1
+
+        return questions[:num_questions]
+
+    def _generate_question(self, sentence: str, keyword: str) -> Dict[str, Union[str, List[str]]]:
+        """Generate a question from a sentence and keyword."""
+        # Create a fill-in-the-blank question
+        question_text = sentence.replace(keyword, "________")
         
-        return questions
+        return {
+            'type': 'fill_blank',
+            'question': question_text,
+            'answer': keyword,
+            'options': []  # No options for fill-in-the-blank
+        }
 
 # Initialize the question generator
 question_generator = QuestionGenerator() 

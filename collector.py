@@ -17,124 +17,56 @@ class WikipediaCollector:
             user_agent='AutoExam/1.0 (mnade@example.com)'
         )
         
-        # Ensure NLTK data directory exists
-        nltk_data_dir = os.path.join(os.getcwd(), 'nltk_data')
-        os.makedirs(nltk_data_dir, exist_ok=True)
-        nltk.data.path.append(nltk_data_dir)
-        
-        # Download required NLTK data
-        self._ensure_nltk_data()
-
-    def _ensure_nltk_data(self):
-        """Ensure required NLTK data is downloaded."""
+        # Initialize NLTK data availability flag
+        self.nltk_available = False
         try:
             nltk.data.find('tokenizers/punkt')
-            logger.info("Found existing punkt data")
+            self.nltk_available = True
+            logger.info("NLTK data found and available")
         except LookupError:
-            logger.info("Downloading punkt...")
-            nltk.download('punkt', quiet=True)
-            logger.info("Successfully downloaded punkt")
+            logger.info("NLTK data not found, using basic text processing")
 
-    def _search_wikipedia(self, query: str) -> List[str]:
-        """
-        Search Wikipedia for a query and return a list of potential page titles.
-        """
+    def get_topic_content(self, topic: str) -> Optional[str]:
+        """Get content for a given topic from Wikipedia."""
         try:
-            # Use Wikipedia's API to search for pages
-            search_url = "https://en.wikipedia.org/w/api.php"
-            params = {
-                "action": "query",
-                "format": "json",
-                "list": "search",
-                "srsearch": query,
-                "srlimit": 5
-            }
-            response = requests.get(search_url, params=params)
-            response.raise_for_status()
-            data = response.json()
-            
-            # Extract page titles from search results
-            search_results = data.get("query", {}).get("search", [])
-            return [result["title"] for result in search_results]
-        except Exception as e:
-            logger.error(f"Error searching Wikipedia: {str(e)}")
-            return []
-
-    def get_topic_content(self, topic: str) -> Dict[str, str]:
-        """
-        Fetch content for a given topic from Wikipedia.
-        
-        Args:
-            topic (str): The topic to search for
-            
-        Returns:
-            Dict[str, str]: Dictionary containing title, summary, and sections
-        """
-        # Try exact match first
-        page = self.wiki.page(topic)
-        if not page.exists():
-            # If exact match fails, try searching
-            logger.info(f"No exact match found for '{topic}', searching alternatives...")
-            search_results = self._search_wikipedia(topic)
-            
-            # Try variations of the topic
-            variations = [
-                topic,
-                topic.lower(),
-                topic.title(),
-                f"{topic} (grammar)" if "tense" in topic.lower() else topic,
-                f"{topic} (linguistics)" if "tense" in topic.lower() else topic
-            ]
-            
-            # Add search results to variations
-            variations.extend(search_results)
-            
-            # Try each variation
-            for variation in variations:
-                logger.info(f"Trying variation: {variation}")
-                page = self.wiki.page(variation)
-                if page.exists() and len(page.summary) > 100:  # Ensure we have meaningful content
-                    logger.info(f"Found content using: {variation}")
-                    break
-            else:
-                logger.error(f"Could not find suitable content for '{topic}'")
+            page = self.wiki.page(topic)
+            if not page.exists():
+                logger.warning(f"Topic '{topic}' not found on Wikipedia")
                 return None
-        
-        # Get main content and sections
-        content = {
-            'title': page.title,
-            'summary': page.summary,
-            'sections': {}
-        }
-        
-        # Add section content, excluding references and external links
-        for section in page.sections:
-            if not any(x in section.title.lower() for x in ['references', 'external links', 'see also']):
-                content['sections'][section.title] = section.text
-        
-        return content
+            return page.text
+        except Exception as e:
+            logger.error(f"Error fetching Wikipedia content: {str(e)}")
+            return None
 
-    def process_content(self, content: Dict[str, str]) -> str:
-        """
-        Process the Wikipedia content into a format suitable for question generation.
-        
-        Args:
-            content (Dict[str, str]): The Wikipedia content
-            
-        Returns:
-            str: Processed content as a single string
-        """
+    def process_content(self, content: str) -> str:
+        """Process the Wikipedia content for question generation."""
         if not content:
             return ""
-        
-        # Combine summary and section content
-        processed_text = content['summary'] + "\n\n"
-        
-        for section_title, section_text in content['sections'].items():
-            if section_text.strip():  # Only add non-empty sections
-                processed_text += f"{section_title}\n{section_text}\n\n"
-        
-        return processed_text.strip()
+
+        # Basic content cleaning
+        lines = content.split('\n')
+        processed_lines = []
+
+        for line in lines:
+            # Skip empty lines and references
+            if not line.strip() or line.startswith('==') or '[' in line:
+                continue
+            processed_lines.append(line)
+
+        processed_content = ' '.join(processed_lines)
+
+        # Use NLTK for sentence tokenization if available
+        if self.nltk_available:
+            try:
+                sentences = nltk.sent_tokenize(processed_content)
+                # Keep only sentences that are likely to be informative
+                sentences = [s for s in sentences if len(s.split()) > 5]
+                return ' '.join(sentences)
+            except Exception as e:
+                logger.warning(f"NLTK processing failed: {str(e)}")
+
+        # Fallback to basic processing
+        return processed_content
 
 # Initialize the collector
 wikipedia_collector = WikipediaCollector() 

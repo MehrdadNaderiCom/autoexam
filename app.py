@@ -26,18 +26,26 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 db = SQLAlchemy(app)
 
-# Set up NLTK data directory
-nltk_data_dir = os.path.join(os.getcwd(), 'nltk_data')
-if not os.path.exists(nltk_data_dir):
-    os.makedirs(nltk_data_dir)
-nltk.data.path.append(nltk_data_dir)
+def download_nltk_data():
+    """Download NLTK data with error handling."""
+    nltk_data_dir = os.path.join(os.getcwd(), 'nltk_data')
+    os.makedirs(nltk_data_dir, exist_ok=True)
+    nltk.data.path.append(nltk_data_dir)
 
-# Download required NLTK data
-for package in ['punkt', 'averaged_perceptron_tagger', 'stopwords']:
-    try:
-        nltk.data.find(f'tokenizers/{package}')
-    except LookupError:
-        nltk.download(package, download_dir=nltk_data_dir)
+    required_packages = ['punkt', 'averaged_perceptron_tagger', 'stopwords']
+    for package in required_packages:
+        try:
+            nltk.download(package, quiet=True, download_dir=nltk_data_dir)
+            logger.info(f"Successfully downloaded NLTK package: {package}")
+        except Exception as e:
+            logger.warning(f"Failed to download NLTK package {package}: {str(e)}")
+            # Continue even if download fails - we'll handle missing data in the question generator
+
+# Try to download NLTK data, but continue if it fails
+try:
+    download_nltk_data()
+except Exception as e:
+    logger.warning(f"Failed to download NLTK data: {str(e)}")
 
 try:
     # Initialize question generator and collector
