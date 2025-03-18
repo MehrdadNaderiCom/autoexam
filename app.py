@@ -25,6 +25,19 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 db = SQLAlchemy(app)
 
+# Set up NLTK data directory
+nltk_data_dir = os.path.join(os.getcwd(), 'nltk_data')
+if not os.path.exists(nltk_data_dir):
+    os.makedirs(nltk_data_dir)
+nltk.data.path.append(nltk_data_dir)
+
+# Download required NLTK data
+for package in ['punkt', 'averaged_perceptron_tagger', 'stopwords']:
+    try:
+        nltk.data.find(f'tokenizers/{package}')
+    except LookupError:
+        nltk.download(package, download_dir=nltk_data_dir)
+
 class Exam(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     topic = db.Column(db.String(200), nullable=False)
