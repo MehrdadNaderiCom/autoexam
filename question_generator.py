@@ -58,24 +58,33 @@ class QuestionGenerator:
         """Use ChatGPT to create a multiple-choice question."""
         try:
             if not openai.api_key:
-                logger.warning("OpenAI API key not found, falling back to basic question generation")
+                logger.warning("OpenAI API key not found")
                 return None
 
-            prompt = f"""Given this sentence: "{sentence}"
-            Create a multiple-choice question that tests understanding of the concept around the word "{keyword}".
-            Format your response as a JSON object with these fields:
-            - question: The question text
-            - correct_answer: The correct answer
-            - options: Array of 4 options including the correct answer
-            - explanation: Brief explanation of why the correct answer is right
-            
-            Make the question professional and meaningful, testing real understanding rather than just memorization."""
+            prompt = f"""Create a high-quality multiple-choice question based on this text: "{sentence}"
+
+Focus on testing understanding of key concepts, especially around "{keyword}".
+
+Requirements:
+1. Question should be clear and professional
+2. Provide exactly 4 options (A, B, C, D)
+3. One option must be clearly correct
+4. Other options should be plausible but incorrect
+5. Include a brief explanation of why the correct answer is right
+
+Format your response as a JSON object with these exact fields:
+{{
+    "question": "The complete question text",
+    "options": ["option A", "option B", "option C", "option D"],
+    "correct_answer": "The full text of the correct option",
+    "explanation": "A brief explanation of why this is the correct answer"
+}}"""
 
             response = openai.chat.completions.create(
                 model="gpt-3.5-turbo",
                 messages=[{"role": "user", "content": prompt}],
                 temperature=0.7,
-                max_tokens=300
+                max_tokens=500
             )
 
             # Parse the response
@@ -111,7 +120,7 @@ class QuestionGenerator:
         }
 
     def generate_questions(self, content, num_questions=5):
-        """Generate questions from the given content."""
+        """Generate multiple-choice questions from the given content."""
         try:
             # Handle both string and dictionary content
             if isinstance(content, dict):
@@ -127,7 +136,7 @@ class QuestionGenerator:
             
             questions = []
             attempts = 0
-            max_attempts = num_questions * 2  # Allow for some failed attempts
+            max_attempts = num_questions * 3  # Allow for some failed attempts
             
             while len(questions) < num_questions and attempts < max_attempts:
                 if not sentences:
@@ -143,12 +152,8 @@ class QuestionGenerator:
                         
                     keyword = random.choice(keywords)
                     
-                    # Try to generate a multiple-choice question first
+                    # Generate multiple-choice question
                     question_data = self._enhance_with_chatgpt(sentence, keyword)
-                    
-                    # If ChatGPT fails, fall back to fill-in-the-blank
-                    if not question_data:
-                        question_data = self._generate_basic_question(sentence, keyword)
                     
                     if question_data:
                         question_data['source_url'] = wiki_url

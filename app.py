@@ -21,7 +21,11 @@ app = Flask(__name__)
 CORS(app)
 
 # Configure database
-app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL', '').replace('postgres://', 'postgresql://') or 'sqlite:///exam.db'
+database_url = os.environ.get('DATABASE_URL', '')
+if database_url.startswith('postgres://'):
+    database_url = database_url.replace('postgres://', 'postgresql://', 1)
+
+app.config['SQLALCHEMY_DATABASE_URI'] = database_url or 'sqlite:///exam.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 db = SQLAlchemy(app)
@@ -97,15 +101,16 @@ class Question(db.Model):
             'created_at': self.created_at.isoformat()
         }
 
-# Create database tables
-def init_db():
-    with app.app_context():
-        try:
-            db.create_all()
-            logger.info("Database initialized successfully")
-        except Exception as e:
-            logger.error(f"Error initializing database: {e}")
-            raise
+# Initialize database when the app starts
+with app.app_context():
+    try:
+        # Drop all tables and recreate them
+        db.drop_all()
+        db.create_all()
+        logger.info("Database tables dropped and recreated successfully")
+    except Exception as e:
+        logger.error(f"Error initializing database: {e}")
+        raise
 
 @app.route('/')
 def index():
@@ -238,9 +243,6 @@ def delete_question(question_id):
     except Exception as e:
         logger.error(f"Error deleting question: {str(e)}")
         return jsonify({'error': str(e)}), 500
-
-# Initialize database when the app starts
-init_db()
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
