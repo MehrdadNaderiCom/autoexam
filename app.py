@@ -99,6 +99,7 @@ def generate_exam():
     try:
         data = request.get_json()
         topic = data.get('topic')
+        num_questions = min(max(int(data.get('num_questions', 5)), 1), 10)  # Limit between 1 and 10
         
         if not topic:
             return jsonify({'error': 'Topic is required'}), 400
@@ -111,15 +112,27 @@ def generate_exam():
         logger.info("Processing content")
         processed_content = wikipedia_collector.process_content(content)
         
-        logger.info("Generating questions")
-        questions = question_generator.generate_questions(processed_content)
+        logger.info(f"Generating {num_questions} questions")
+        questions = question_generator.generate_questions(processed_content, num_questions)
         
         if not questions:
             return jsonify({'error': 'Could not generate questions from the content'}), 422
         
         logger.info("Saving to database")
+        # Save to Exam model
         exam = Exam(topic=topic, questions=questions)
         db.session.add(exam)
+        
+        # Also save individual questions to Question model
+        for q in questions:
+            question = Question(
+                topic=topic,
+                question_text=q['question'],
+                options=str(q.get('options', [])),
+                answer=q['answer']
+            )
+            db.session.add(question)
+        
         db.session.commit()
         
         # Format questions for frontend with enhanced structure

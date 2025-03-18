@@ -96,6 +96,10 @@
                         <label for="topic" class="form-label">Enter a topic:</label>
                         <input type="text" class="form-control" id="topic" required>
                     </div>
+                    <div class="mb-3">
+                        <label for="numQuestions" class="form-label">Number of questions:</label>
+                        <input type="number" class="form-control" id="numQuestions" min="1" max="10" value="5" required>
+                    </div>
                     <button type="submit" class="btn btn-primary">Generate Questions</button>
                 </form>
             </div>
@@ -117,6 +121,7 @@
         document.getElementById('generateForm').addEventListener('submit', async (e) => {
             e.preventDefault();
             const topic = document.getElementById('topic').value;
+            const numQuestions = parseInt(document.getElementById('numQuestions').value);
             const questionsDiv = document.getElementById('questions');
             const loading = document.getElementById('loading');
             const error = document.getElementById('error');
@@ -131,7 +136,7 @@
                     headers: {
                         'Content-Type': 'application/json',
                     },
-                    body: JSON.stringify({ topic }),
+                    body: JSON.stringify({ topic, num_questions: numQuestions }),
                 });
 
                 const data = await response.json();
