@@ -1,12 +1,12 @@
 import os
+import logging
 from flask import Flask, request, jsonify, render_template
 from flask_sqlalchemy import SQLAlchemy
 from flask_cors import CORS
 from datetime import datetime
-from collector import wikipedia_collector
-from question_generator import question_generator
+from collector import WikipediaCollector
+from question_generator import QuestionGenerator
 from dotenv import load_dotenv
-import logging
 import nltk
 
 # Load environment variables
@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 app = Flask(__name__)
 CORS(app)
 
-# Database configuration
+# Configure database
 app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL', '').replace('postgres://', 'postgresql://') or 'sqlite:///exam.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
@@ -38,6 +38,15 @@ for package in ['punkt', 'averaged_perceptron_tagger', 'stopwords']:
     except LookupError:
         nltk.download(package, download_dir=nltk_data_dir)
 
+try:
+    # Initialize question generator and collector
+    question_generator = QuestionGenerator()
+    wikipedia_collector = WikipediaCollector()
+    logger.info("Successfully initialized QuestionGenerator and WikipediaCollector")
+except Exception as e:
+    logger.error(f"Error initializing components: {str(e)}")
+    # Continue anyway, we'll handle errors in the endpoints
+
 class Exam(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     topic = db.Column(db.String(200), nullable=False)
@@ -50,13 +59,13 @@ def home():
 
 @app.route('/generate', methods=['POST'])
 def generate_exam():
-    data = request.get_json()
-    topic = data.get('topic')
-    
-    if not topic:
-        return jsonify({'error': 'Topic is required'}), 400
-    
     try:
+        data = request.get_json()
+        topic = data.get('topic')
+        
+        if not topic:
+            return jsonify({'error': 'Topic is required'}), 400
+        
         logger.info(f"Fetching content for topic: {topic}")
         content = wikipedia_collector.get_topic_content(topic)
         if not content:

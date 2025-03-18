@@ -11,34 +11,39 @@ from typing import List, Dict, Union
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Set up NLTK data directory
-nltk_data_dir = os.path.join(os.getcwd(), 'nltk_data')
-if not os.path.exists(nltk_data_dir):
-    os.makedirs(nltk_data_dir)
-nltk.data.path.append(nltk_data_dir)
-
-def download_nltk_data():
-    """Download required NLTK data packages."""
-    required_packages = ['punkt', 'averaged_perceptron_tagger', 'stopwords']
-    for package in required_packages:
-        try:
-            nltk.data.find(f'tokenizers/{package}')
-            logger.info(f"Package {package} is already downloaded")
-        except LookupError:
-            try:
-                nltk.download(package, download_dir=nltk_data_dir, quiet=True)
-                logger.info(f"Successfully downloaded {package}")
-            except Exception as e:
-                logger.error(f"Error downloading {package}: {str(e)}")
-                raise
-
-# Download NLTK data at module level
-download_nltk_data()
-
 class QuestionGenerator:
     def __init__(self):
-        # No need to download NLTK data here since it's done at module level
-        pass
+        """Initialize the QuestionGenerator with required NLTK data."""
+        self.nltk_data_dir = os.path.join(os.getcwd(), 'nltk_data')
+        if not os.path.exists(self.nltk_data_dir):
+            os.makedirs(self.nltk_data_dir, exist_ok=True)
+        nltk.data.path.append(self.nltk_data_dir)
+
+        # Download required NLTK data
+        self._ensure_nltk_data()
+        self.stop_words = set(stopwords.words('english'))
+
+    def _ensure_nltk_data(self):
+        """Ensure all required NLTK data is downloaded."""
+        required_packages = {
+            'punkt': 'tokenizers/punkt',
+            'averaged_perceptron_tagger': 'taggers/averaged_perceptron_tagger',
+            'stopwords': 'corpora/stopwords'
+        }
+
+        for package, path in required_packages.items():
+            try:
+                nltk.data.find(path)
+                logger.info(f"Found existing {package} data")
+            except LookupError:
+                try:
+                    logger.info(f"Downloading {package}...")
+                    nltk.download(package, download_dir=self.nltk_data_dir, quiet=True)
+                    logger.info(f"Successfully downloaded {package}")
+                except Exception as e:
+                    logger.error(f"Error downloading {package}: {str(e)}")
+                    # Continue even if download fails, as the data might already be present
+                    pass
 
     def generate_questions(self, content: str, num_questions: int = 10) -> List[Dict[str, Union[str, List[str]]]]:
         """
