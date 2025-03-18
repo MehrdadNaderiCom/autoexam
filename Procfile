@@ -1,2 +1,2 @@
-release: python -m spacy download en_core_web_sm --no-deps && python -c "import nltk; nltk.download('punkt', quiet=True); nltk.download('stopwords', quiet=True); nltk.download('averaged_perceptron_tagger', quiet=True)"
+release: python -m spacy download en_core_web_sm --no-deps
 web: gunicorn app:app 
