@@ -63,23 +63,25 @@ class Exam(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
 class Question(db.Model):
+    """Model for storing individual questions."""
     id = db.Column(db.Integer, primary_key=True)
     topic = db.Column(db.String(200), nullable=False)
     question_text = db.Column(db.Text, nullable=False)
-    options = db.Column(db.Text, nullable=False)  # Stored as JSON string
+    options = db.Column(db.Text)  # Stored as JSON string
     answer = db.Column(db.Text, nullable=False)
+    source_url = db.Column(db.Text)  # Added for Wikipedia source URL
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    source_url = db.Column(db.Text)  # Added for source URL
 
     def to_dict(self):
+        """Convert question to dictionary."""
         return {
             'id': self.id,
             'topic': self.topic,
             'question': self.question_text,
             'options': eval(self.options),  # Convert JSON string back to list
             'answer': self.answer,
-            'created_at': self.created_at.isoformat(),
-            'source_url': self.source_url
+            'source_url': self.source_url,
+            'created_at': self.created_at.isoformat()
         }
 
 # Create database tables
