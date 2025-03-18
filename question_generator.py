@@ -113,12 +113,19 @@ class QuestionGenerator:
     def generate_questions(self, content, num_questions=5):
         """Generate questions from the given content."""
         try:
-            sentences = self._tokenize_text(content['text'])
+            # Handle both string and dictionary content
+            if isinstance(content, str):
+                text = content
+                wiki_url = ''
+            else:
+                text = content.get('text', '')
+                wiki_url = content.get('url', '')
+
+            sentences = self._tokenize_text(text)
             if not sentences:
                 return None
             
             questions = []
-            wiki_url = content.get('url', '')  # Get Wikipedia URL from content
             
             for _ in range(min(num_questions, len(sentences))):
                 sentence = random.choice(sentences)
@@ -132,13 +139,15 @@ class QuestionGenerator:
                         if question_data:
                             question_data['source_url'] = wiki_url  # Add Wikipedia URL to question data
                             questions.append(question_data)
+                        else:
+                            # Fallback to basic question if ChatGPT fails
+                            question = self._generate_basic_question(sentence, keyword)
+                            if question:
+                                question['source_url'] = wiki_url  # Add Wikipedia URL to fallback question
+                                questions.append(question)
                 except Exception as e:
-                    logger.error(f"Error generating question with ChatGPT: {e}")
-                    # Fallback to basic question if ChatGPT fails
-                    question = self._generate_basic_question(sentence, keyword)
-                    if question:
-                        question['source_url'] = wiki_url  # Add Wikipedia URL to fallback question
-                        questions.append(question)
+                    logger.error(f"Error generating question: {e}")
+                    continue
             
             return questions if questions else None
         except Exception as e:
