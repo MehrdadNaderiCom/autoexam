@@ -122,22 +122,18 @@ def generate_exam():
         db.session.add(exam)
         db.session.commit()
         
-        # Format questions for frontend
+        # Format questions for frontend with enhanced structure
         formatted_questions = []
         for q in questions:
-            if q['type'] == 'multiple_choice':
-                formatted_questions.append({
-                    'question_type': 'multiple_choice',
-                    'question_text': q['question'],
-                    'options': q['options'],
-                    'answer_text': q['answer']
-                })
-            else:  # fill_blank
-                formatted_questions.append({
-                    'question_type': 'fill_blank',
-                    'question_text': q['question'],
-                    'answer_text': q['answer']
-                })
+            formatted_q = {
+                'question_type': q['type'],
+                'question_text': q['question'],
+                'options': q.get('options', []),
+                'answer_text': q['answer'],
+                'explanation': q.get('explanation', ''),
+                'show_answer': False  # Add this flag for frontend toggle
+            }
+            formatted_questions.append(formatted_q)
         
         return jsonify({
             'id': exam.id,

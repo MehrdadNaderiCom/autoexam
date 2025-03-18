@@ -2,11 +2,15 @@ import os
 import random
 import nltk
 import logging
+import openai
 from typing import List, Dict, Union
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+# Configure OpenAI
+openai.api_key = os.getenv('OPENAI_API_KEY')
 
 class QuestionGenerator:
     def __init__(self):
@@ -50,6 +54,62 @@ class QuestionGenerator:
         words = sentence.split()
         return [word for word in words if len(word) >= 4 and word.isalnum()]
 
+    def _enhance_with_chatgpt(self, sentence: str, keyword: str) -> Dict[str, Union[str, List[str]]]:
+        """Use ChatGPT to create a better question from the sentence and keyword."""
+        try:
+            if not openai.api_key:
+                logger.warning("OpenAI API key not found, falling back to basic question generation")
+                return None
+
+            prompt = f"""Given this sentence: "{sentence}"
+            Create a multiple-choice question that tests understanding of the concept around the word "{keyword}".
+            Format your response as a JSON object with these fields:
+            - question: The question text
+            - correct_answer: The correct answer
+            - options: Array of 4 options including the correct answer
+            - explanation: Brief explanation of why the correct answer is right
+            
+            Make the question professional and meaningful, testing real understanding rather than just memorization."""
+
+            response = openai.ChatCompletion.create(
+                model="gpt-3.5-turbo",
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.7,
+                max_tokens=300
+            )
+
+            # Parse the response
+            content = response.choices[0].message.content
+            try:
+                # Try to evaluate the JSON-like string (safer than eval)
+                import ast
+                result = ast.literal_eval(content)
+                return {
+                    'type': 'multiple_choice',
+                    'question': result['question'],
+                    'options': result['options'],
+                    'answer': result['correct_answer'],
+                    'explanation': result['explanation']
+                }
+            except:
+                logger.warning("Failed to parse ChatGPT response, falling back to basic question")
+                return None
+
+        except Exception as e:
+            logger.warning(f"ChatGPT enhancement failed: {str(e)}")
+            return None
+
+    def _generate_basic_question(self, sentence: str, keyword: str) -> Dict[str, Union[str, List[str]]]:
+        """Generate a basic fill-in-the-blank question as fallback."""
+        question_text = sentence.replace(keyword, "________")
+        return {
+            'type': 'fill_blank',
+            'question': question_text,
+            'answer': keyword,
+            'options': [],
+            'explanation': f"The word '{keyword}' fits in this context based on the original text."
+        }
+
     def generate_questions(self, text: str, num_questions: int = 5) -> List[Dict]:
         """Generate a list of questions from the given text."""
         questions = []
@@ -73,25 +133,16 @@ class QuestionGenerator:
 
             if keywords:
                 keyword = random.choice(keywords)
-                question = self._generate_question(sentence, keyword)
+                # Try ChatGPT first, fall back to basic if it fails
+                question = self._enhance_with_chatgpt(sentence, keyword)
+                if not question:
+                    question = self._generate_basic_question(sentence, keyword)
                 if question:
                     questions.append(question)
 
             attempts -= 1
 
         return questions[:num_questions]
-
-    def _generate_question(self, sentence: str, keyword: str) -> Dict[str, Union[str, List[str]]]:
-        """Generate a question from a sentence and keyword."""
-        # Create a fill-in-the-blank question
-        question_text = sentence.replace(keyword, "________")
-        
-        return {
-            'type': 'fill_blank',
-            'question': question_text,
-            'answer': keyword,
-            'options': []  # No options for fill-in-the-blank
-        }
 
 # Initialize the question generator
 question_generator = QuestionGenerator() 
