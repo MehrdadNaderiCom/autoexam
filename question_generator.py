@@ -10,9 +10,6 @@ from typing import List, Dict, Union
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Configure OpenAI
-client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
-
 class QuestionGenerator:
     def __init__(self):
         """Initialize the QuestionGenerator."""
@@ -67,6 +64,9 @@ class QuestionGenerator:
             if not (api_key.startswith('sk-') or api_key.startswith('sk-proj-')):
                 logger.error("Invalid OpenAI API key format")
                 return None
+
+            # Initialize OpenAI client
+            client = OpenAI(api_key=api_key)
 
             # Clean and validate the sentence
             sentence = sentence.strip()
