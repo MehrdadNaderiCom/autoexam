@@ -66,13 +66,19 @@ class QuestionGenerator:
                 logger.error("Invalid OpenAI API key format")
                 return None
 
-            prompt = f"""Create a high-quality multiple-choice question based on this text: "{sentence}"
+            # Clean and validate the sentence
+            sentence = sentence.strip()
+            if len(sentence.split()) < 10:
+                logger.warning("Sentence too short for question generation")
+                return None
+
+            prompt = f"""Create a multiple-choice question based on this text: "{sentence}"
 
 Focus on testing understanding of key concepts, especially around "{keyword}".
 
 Requirements:
-1. Question should be clear and professional
-2. Provide exactly 4 options (A, B, C, D)
+1. Question should be clear and test understanding (not just memorization)
+2. Provide exactly 4 options labeled A, B, C, D
 3. One option must be clearly correct
 4. Other options should be plausible but incorrect
 5. Include a brief explanation of why the correct answer is right
@@ -80,15 +86,18 @@ Requirements:
 Format your response as a JSON object with these exact fields:
 {{
     "question": "The complete question text",
-    "options": ["option A", "option B", "option C", "option D"],
-    "correct_answer": "The full text of the correct option",
+    "options": ["A) first option", "B) second option", "C) third option", "D) fourth option"],
+    "correct_answer": "The full text of the correct option (including the letter prefix)",
     "explanation": "A brief explanation of why this is the correct answer"
 }}"""
 
             try:
                 response = openai.chat.completions.create(
                     model="gpt-3.5-turbo",
-                    messages=[{"role": "user", "content": prompt}],
+                    messages=[
+                        {"role": "system", "content": "You are a professional exam question creator."},
+                        {"role": "user", "content": prompt}
+                    ],
                     temperature=0.7,
                     max_tokens=500
                 )
@@ -108,13 +117,29 @@ Format your response as a JSON object with these exact fields:
             try:
                 # Try to evaluate the JSON-like string (safer than eval)
                 import ast
-                result = ast.literal_eval(content)
+                import json
+                try:
+                    # First try json.loads for proper JSON
+                    result = json.loads(content)
+                except json.JSONDecodeError:
+                    # Fallback to ast.literal_eval for Python dict format
+                    result = ast.literal_eval(content)
+
+                # Validate the result
+                required_fields = ['question', 'options', 'correct_answer', 'explanation']
+                if not all(field in result for field in required_fields):
+                    logger.error("Missing required fields in ChatGPT response")
+                    return None
+                if len(result['options']) != 4:
+                    logger.error("Incorrect number of options in ChatGPT response")
+                    return None
+
                 return {
                     'type': 'multiple_choice',
-                    'question': result['question'],
-                    'options': result['options'],
-                    'answer': result['correct_answer'],
-                    'explanation': result['explanation']
+                    'question': result['question'].strip(),
+                    'options': [opt.strip() for opt in result['options']],
+                    'answer': result['correct_answer'].strip(),
+                    'explanation': result['explanation'].strip()
                 }
             except Exception as e:
                 logger.error(f"Failed to parse ChatGPT response: {str(e)}")
@@ -143,13 +168,31 @@ Format your response as a JSON object with these exact fields:
             if isinstance(content, dict):
                 text = content.get('text', '')
                 wiki_url = content.get('url', '')
+                title = content.get('title', '')
             else:
                 text = str(content)
                 wiki_url = ''
+                title = ''
 
+            if not text.strip():
+                logger.warning("Empty content provided")
+                return None
+
+            # Tokenize the text into sentences
             sentences = self._tokenize_text(text)
             if not sentences:
-                return []
+                logger.warning("No sentences found in content")
+                return None
+            
+            # Filter out short sentences and those with special characters
+            sentences = [s for s in sentences 
+                        if len(s.split()) >= 10 and  # Minimum words
+                        len(s.split()) <= 50 and  # Maximum words
+                        not any(char in s for char in ['|', '{', '}', '[', ']'])]
+            
+            if not sentences:
+                logger.warning("No valid sentences found after filtering")
+                return None
             
             questions = []
             attempts = 0
@@ -159,29 +202,37 @@ Format your response as a JSON object with these exact fields:
                 if not sentences:
                     break
                 
+                # Select a random sentence
                 sentence = random.choice(sentences)
                 sentences.remove(sentence)  # Avoid reusing the same sentence
                 
                 try:
+                    # Extract keywords
                     keywords = self._extract_keywords(sentence)
                     if not keywords:
+                        logger.warning(f"No keywords found in sentence: {sentence[:50]}...")
                         continue
                         
+                    # Select a keyword and generate a question
                     keyword = random.choice(keywords)
-                    
-                    # Generate multiple-choice question
                     question_data = self._enhance_with_chatgpt(sentence, keyword)
                     
                     if question_data:
                         question_data['source_url'] = wiki_url
+                        question_data['source_title'] = title
                         questions.append(question_data)
+                        logger.info(f"Successfully generated question {len(questions)}/{num_questions}")
                 
                 except Exception as e:
                     logger.warning(f"Failed to generate question: {str(e)}")
                 
                 attempts += 1
             
-            return questions if questions else None
+            if not questions:
+                logger.warning("Failed to generate any questions")
+                return None
+            
+            return questions
             
         except Exception as e:
             logger.error(f"Error in generate_questions: {str(e)}")
