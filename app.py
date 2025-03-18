@@ -1,6 +1,9 @@
 import os
 from flask import Flask, request, jsonify, render_template
-from database import db, init_db, Question
+from flask_sqlalchemy import SQLAlchemy
+from flask_cors import CORS
+from datetime import datetime
+from collector import wikipedia_collector
 from analyzer import question_generator
 from dotenv import load_dotenv
 
@@ -8,59 +11,73 @@ from dotenv import load_dotenv
 load_dotenv()
 
 app = Flask(__name__)
-init_db(app)
+CORS(app)
+
+# Database configuration
+app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL', 'sqlite:///exams.db')
+if app.config['SQLALCHEMY_DATABASE_URI'].startswith("postgres://"):
+    app.config['SQLALCHEMY_DATABASE_URI'] = app.config['SQLALCHEMY_DATABASE_URI'].replace("postgres://", "postgresql://", 1)
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+
+db = SQLAlchemy(app)
+
+class Exam(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    topic = db.Column(db.String(200), nullable=False)
+    questions = db.Column(db.JSON, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
 @app.route('/')
-def index():
+def home():
     return render_template('index.html')
 
-@app.route('/generate', methods=['POST'])
-def generate():
+@app.route('/api/generate', methods=['POST'])
+def generate_exam():
     data = request.get_json()
-    if not data or 'text' not in data:
-        return jsonify({'error': 'No text provided'}), 400
+    topic = data.get('topic')
     
-    text = data['text']
-    max_questions = data.get('max_questions', 5)
+    if not topic:
+        return jsonify({'error': 'Topic is required'}), 400
     
     try:
-        # Generate questions using the question generator
-        questions = question_generator.generate_questions(text, max_questions)
+        # Fetch Wikipedia content
+        wiki_content = wikipedia_collector.get_topic_content(topic)
+        if not wiki_content:
+            return jsonify({'error': 'Could not find Wikipedia content for the given topic'}), 404
         
-        # Save questions to database
-        saved_questions = []
-        for q in questions:
-            question = Question(
-                question_text=q['question_text'],
-                answer_text=q['answer_text'],
-                question_type=q['question_type'],
-                source_text=q['source_text']
-            )
-            db.session.add(question)
-            saved_questions.append(question.to_dict())
+        # Process content into chunks suitable for question generation
+        text_chunks = wikipedia_collector.process_content(wiki_content)
         
+        # Generate questions
+        questions = question_generator.generate_questions(text_chunks)
+        
+        # Save to database
+        exam = Exam(
+            topic=topic,
+            questions=questions
+        )
+        db.session.add(exam)
         db.session.commit()
-        return jsonify({'questions': saved_questions})
+        
+        return jsonify({
+            'id': exam.id,
+            'topic': exam.topic,
+            'questions': exam.questions
+        })
         
     except Exception as e:
-        db.session.rollback()
-        return jsonify({'error': str(e)}), 500
+        app.logger.error(f"Error generating exam: {str(e)}")
+        return jsonify({'error': 'Failed to generate exam'}), 500
 
-@app.route('/questions', methods=['GET'])
-def list_questions():
-    questions = Question.query.order_by(Question.created_at.desc()).all()
-    return jsonify({'questions': [q.to_dict() for q in questions]})
-
-@app.route('/questions/<int:question_id>', methods=['DELETE'])
-def delete_question(question_id):
-    question = Question.query.get_or_404(question_id)
-    try:
-        db.session.delete(question)
-        db.session.commit()
-        return '', 204
-    except Exception as e:
-        db.session.rollback()
-        return jsonify({'error': str(e)}), 500
+@app.route('/api/exams/<int:exam_id>', methods=['GET'])
+def get_exam(exam_id):
+    exam = Exam.query.get_or_404(exam_id)
+    return jsonify({
+        'id': exam.id,
+        'topic': exam.topic,
+        'questions': exam.questions,
+        'created_at': exam.created_at.isoformat()
+    })
 
 @app.route('/health')
 def health_check():
