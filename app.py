@@ -101,16 +101,16 @@ class Question(db.Model):
             'created_at': self.created_at.isoformat()
         }
 
-# Initialize database when the app starts
+# Initialize database
 with app.app_context():
     try:
-        # Drop all tables and recreate them
-        db.drop_all()
+        # Create all tables
         db.create_all()
-        logger.info("Database tables dropped and recreated successfully")
+        logger.info("Database tables created successfully")
     except Exception as e:
-        logger.error(f"Error initializing database: {e}")
-        raise
+        logger.error(f"Error creating database tables: {str(e)}")
+        # If tables already exist, we can continue
+        pass
 
 @app.route('/')
 def index():
