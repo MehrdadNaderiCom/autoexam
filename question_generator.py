@@ -2,9 +2,9 @@ import os
 import random
 import nltk
 import logging
-import spacy
 from nltk.tokenize import sent_tokenize
 from nltk.corpus import stopwords
+from nltk.tag import pos_tag
 from typing import List, Dict, Union
 
 # Set up logging
@@ -29,14 +29,6 @@ class QuestionGenerator:
         else:
             self.use_basic_tokenization = False
         
-        # Load spaCy model
-        try:
-            self.nlp = spacy.load('en_core_web_sm')
-        except OSError:
-            logger.info("Downloading spaCy model...")
-            os.system('python -m spacy download en_core_web_sm')
-            self.nlp = spacy.load('en_core_web_sm')
-        
         logger.info("QuestionGenerator initialized successfully")
 
     def _ensure_nltk_data(self):
@@ -57,7 +49,6 @@ class QuestionGenerator:
 
     def _basic_tokenize(self, text: str) -> List[str]:
         """Basic sentence tokenization when NLTK data is not available."""
-        # Split on common sentence endings
         sentences = []
         current = []
         
@@ -75,77 +66,62 @@ class QuestionGenerator:
     def _generate_question_from_text(self, sentence: str) -> Dict[str, Union[str, List[str]]]:
         """Generate a question-answer pair from the given sentence."""
         try:
-            doc = self.nlp(sentence)
+            # Tokenize and tag parts of speech
+            tokens = nltk.word_tokenize(sentence)
+            tagged = pos_tag(tokens)
             
-            # Extract key information
-            entities = [(ent.text, ent.label_) for ent in doc.ents]
+            # Find important words (nouns, verbs, adjectives)
+            important_words = []
+            for word, tag in tagged:
+                if tag.startswith(('NN', 'VB', 'JJ')):  # Nouns, Verbs, Adjectives
+                    important_words.append(word)
             
-            if not entities:
-                # If no entities found, try to generate a question about the subject
-                for token in doc:
-                    if token.dep_ == 'nsubj':
-                        entities = [(token.text, 'SUBJECT')]
-                        break
+            if not important_words:
+                return None
             
-            if not entities:
-                # If still no entities, try to generate a general question
-                return {
-                    'type': 'multiple_choice',
-                    'question': 'What is the main point of this statement?',
-                    'options': [
-                        sentence,
-                        'This statement is incorrect',
-                        'This statement is unrelated',
-                        'None of the above'
-                    ],
-                    'answer': sentence
-                }
-                
-            # Choose a random entity to ask about
-            entity, entity_type = random.choice(entities)
+            # Choose a random important word
+            target_word = random.choice(important_words)
             
-            # Generate question based on entity type
+            # Generate question based on word type
+            word_type = next(tag for word, tag in tagged if word == target_word)
+            
             question_templates = {
-                'PERSON': [
-                    f"Who is {entity}?",
-                    f"What role did {entity} play in this context?",
+                'NN': [  # Nouns
+                    f"What is {target_word}?",
+                    f"Can you explain the concept of {target_word}?",
+                    f"What role does {target_word} play in this context?"
                 ],
-                'ORG': [
-                    f"What is {entity}?",
-                    f"What is the significance of {entity}?",
+                'VB': [  # Verbs
+                    f"What does {target_word} mean in this context?",
+                    f"How does {target_word} relate to the main topic?",
+                    f"Can you explain the process of {target_word}?"
                 ],
-                'DATE': [
-                    f"When did this event occur?",
-                    f"What happened in {entity}?",
-                ],
-                'GPE': [
-                    f"What is significant about {entity}?",
-                    f"Where is {entity} located?",
-                ],
-                'SUBJECT': [
-                    f"What about {entity}?",
-                    f"Can you explain what {entity} does in this context?",
-                ],
-                'DEFAULT': [
-                    f"What is {entity}?",
-                    f"Can you explain the significance of {entity}?",
+                'JJ': [  # Adjectives
+                    f"What makes something {target_word}?",
+                    f"How does {target_word} affect the context?",
+                    f"Can you explain the significance of being {target_word}?"
                 ]
             }
             
-            templates = question_templates.get(entity_type, question_templates['DEFAULT'])
+            # Get appropriate templates based on word type
+            templates = question_templates.get(word_type[:2], question_templates['NN'])
             question = random.choice(templates)
             
             # Generate distractors
-            other_entities = [e[0] for e in entities if e[0] != entity]
             distractors = []
+            other_words = [word for word in important_words if word != target_word]
             
-            if other_entities:
-                distractors.extend(random.sample(other_entities, min(2, len(other_entities))))
+            if other_words:
+                distractors.extend(random.sample(other_words, min(2, len(other_words))))
             
             while len(distractors) < 3:
-                # Generate a plausible but incorrect answer
-                distractor = f"Not {entity}" if len(distractors) == 0 else f"Something related to {entity}"
-                distractors.append(distractor)
+                # Generate plausible distractors
+                if word_type.startswith('NN'):
+                    distractors.append(f"Different type of {target_word}")
+                elif word_type.startswith('VB'):
+                    distractors.append(f"Alternative to {target_word}")
+                else:
+                    distractors.append(f"Opposite of {target_word}")
             
             options = distractors + [sentence]
             random.shuffle(options)

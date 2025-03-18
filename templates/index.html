@@ -4,134 +4,223 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>AutoExam Generator</title>
-    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        body {
+            background-color: #f8f9fa;
+            padding: 20px;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        .card {
+            margin-bottom: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .question-card {
+            transition: transform 0.2s;
+        }
+        .question-card:hover {
+            transform: translateY(-5px);
+        }
+        .loading {
+            display: none;
+            text-align: center;
+            padding: 20px;
+        }
+        .loading i {
+            font-size: 2em;
+            color: #0d6efd;
+        }
+        .history-section {
+            margin-top: 40px;
+        }
+        .btn-delete {
+            color: #dc3545;
+            cursor: pointer;
+        }
+        .btn-delete:hover {
+            color: #bb2d3b;
+        }
+    </style>
 </head>
-<body class="bg-gray-100 min-h-screen">
-    <div class="container mx-auto px-4 py-8">
-        <h1 class="text-4xl font-bold text-center mb-8">AutoExam Generator</h1>
+<body>
+    <div class="container">
+        <h1 class="text-center mb-4">AutoExam Generator</h1>
         
         <!-- Input Form -->
-        <div class="max-w-2xl mx-auto bg-white rounded-lg shadow-md p-6 mb-8">
-            <form id="examForm" class="space-y-4">
-                <div>
-                    <label for="topic" class="block text-sm font-medium text-gray-700">Enter a Topic</label>
-                    <input type="text" id="topic" name="topic" required
-                           class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
-                    <p class="mt-1 text-sm text-gray-500">Enter any topic to generate questions from Wikipedia content</p>
-                </div>
-                <button type="submit"
-                        class="w-full bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2">
-                    Generate Questions
-                </button>
-            </form>
+        <div class="card">
+            <div class="card-body">
+                <form id="questionForm">
+                    <div class="mb-3">
+                        <label for="topic" class="form-label">Enter a topic:</label>
+                        <input type="text" class="form-control" id="topic" required 
+                               placeholder="e.g., Python programming, World War II, Quantum Physics">
+                    </div>
+                    <div class="mb-3">
+                        <label for="numQuestions" class="form-label">Number of questions:</label>
+                        <input type="number" class="form-control" id="numQuestions" 
+                               value="5" min="1" max="20">
+                    </div>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-magic"></i> Generate Questions
+                    </button>
+                </form>
+            </div>
         </div>
 
         <!-- Loading Indicator -->
-        <div id="loading" class="hidden">
-            <div class="flex justify-center items-center">
-                <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
-            </div>
-            <p class="text-center mt-4 text-gray-600">Generating questions...</p>
+        <div class="loading" id="loading">
+            <i class="fas fa-spinner fa-spin"></i>
+            <p class="mt-2">Generating questions... This may take a few moments.</p>
         </div>
 
-        <!-- Questions Display -->
-        <div id="questionsContainer" class="hidden max-w-4xl mx-auto space-y-6">
-            <h2 class="text-2xl font-semibold mb-4">Generated Questions</h2>
-            <div id="questions" class="space-y-6"></div>
+        <!-- Results Section -->
+        <div id="results" style="display: none;">
+            <h2 class="mb-3">Generated Questions</h2>
+            <div id="questionsList"></div>
+            <div class="text-center mt-3">
+                <a href="#" id="wikipediaLink" target="_blank" class="btn btn-outline-primary">
+                    <i class="fas fa-external-link-alt"></i> View on Wikipedia
+                </a>
+            </div>
+        </div>
+
+        <!-- History Section -->
+        <div class="history-section">
+            <h2 class="mb-3">Question History</h2>
+            <div id="historyList"></div>
         </div>
     </div>
 
     <script>
-        document.getElementById('examForm').addEventListener('submit', async (e) => {
+        document.getElementById('questionForm').addEventListener('submit', async (e) => {
             e.preventDefault();
+            
             const topic = document.getElementById('topic').value;
-            const loading = document.getElementById('loading');
-            const questionsContainer = document.getElementById('questionsContainer');
-            const questionsDiv = document.getElementById('questions');
-
-            loading.classList.remove('hidden');
-            questionsContainer.classList.add('hidden');
-            questionsDiv.innerHTML = '';
-
+            const numQuestions = document.getElementById('numQuestions').value;
+            
+            // Show loading
+            document.getElementById('loading').style.display = 'block';
+            document.getElementById('results').style.display = 'none';
+            
             try {
-                const response = await fetch('/api/generate', {
+                const response = await fetch('/generate', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
                     },
-                    body: JSON.stringify({ topic }),
+                    body: JSON.stringify({ topic, num_questions: numQuestions }),
                 });
-
+                
                 const data = await response.json();
+                
                 if (response.ok) {
                     displayQuestions(data.questions);
+                    document.getElementById('wikipediaLink').href = data.wikipedia_url;
+                    document.getElementById('results').style.display = 'block';
+                    loadHistory(); // Refresh history
                 } else {
-                    throw new Error(data.error || 'Failed to generate questions');
+                    alert(data.error || 'Failed to generate questions');
                 }
             } catch (error) {
-                alert(error.message);
+                alert('Error generating questions. Please try again.');
+                console.error('Error:', error);
             } finally {
-                loading.classList.add('hidden');
+                document.getElementById('loading').style.display = 'none';
             }
         });
 
         function displayQuestions(questions) {
-            const questionsDiv = document.getElementById('questions');
-            const questionsContainer = document.getElementById('questionsContainer');
+            const container = document.getElementById('questionsList');
+            container.innerHTML = '';
             
             questions.forEach((q, index) => {
-                const questionElement = document.createElement('div');
-                questionElement.className = 'bg-white rounded-lg shadow-md p-6';
-                
-                let questionContent = '';
-                if (q.question_type === 'multiple_choice') {
-                    questionContent = `
-                        <h3 class="font-semibold text-lg mb-4">Question ${index + 1}</h3>
-                        <p class="mb-4">${q.question_text}</p>
-                        <div class="space-y-2">
+                const card = document.createElement('div');
+                card.className = 'card question-card';
+                card.innerHTML = `
+                    <div class="card-body">
+                        <h5 class="card-title">Question ${index + 1}</h5>
+                        <p class="card-text">${q.question}</p>
+                        <div class="options">
                             ${q.options.map((option, i) => `
-                                <div class="flex items-center">
-                                    <input type="radio" id="q${index}_opt${i}" name="q${index}" class="mr-2">
-                                    <label for="q${index}_opt${i}">${option}</label>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="radio" 
+                                           name="question${index}" value="${i}">
+                                    <label class="form-check-label">${option}</label>
                                 </div>
                             `).join('')}
                         </div>
-                        <div class="mt-4 pt-4 border-t">
-                            <button onclick="toggleAnswer(${index})" class="text-blue-600 hover:text-blue-800">
-                                Show Answer
-                            </button>
-                            <p id="answer${index}" class="hidden mt-2">
-                                Correct Answer: ${q.answer_text}
-                            </p>
-                        </div>
-                    `;
-                } else if (q.question_type === 'fill_blank') {
-                    questionContent = `
-                        <h3 class="font-semibold text-lg mb-4">Question ${index + 1}</h3>
-                        <p class="mb-4">${q.question_text}</p>
-                        <div class="mt-4">
-                            <input type="text" placeholder="Your answer" class="border rounded px-2 py-1">
-                            <button onclick="toggleAnswer(${index})" class="ml-2 text-blue-600 hover:text-blue-800">
-                                Show Answer
-                            </button>
-                            <p id="answer${index}" class="hidden mt-2">
-                                Correct Answer: ${q.answer_text}
-                            </p>
-                        </div>
-                    `;
-                }
-                
-                questionElement.innerHTML = questionContent;
-                questionsDiv.appendChild(questionElement);
+                    </div>
+                `;
+                container.appendChild(card);
             });
-            
-            questionsContainer.classList.remove('hidden');
         }
 
-        function toggleAnswer(index) {
-            const answer = document.getElementById(`answer${index}`);
-            answer.classList.toggle('hidden');
+        async function loadHistory() {
+            try {
+                const response = await fetch('/history');
+                const data = await response.json();
+                
+                const container = document.getElementById('historyList');
+                container.innerHTML = '';
+                
+                data.questions.forEach(q => {
+                    const card = document.createElement('div');
+                    card.className = 'card question-card';
+                    card.innerHTML = `
+                        <div class="card-body">
+                            <div class="d-flex justify-content-between align-items-start">
+                                <h5 class="card-title">${q.topic}</h5>
+                                <i class="fas fa-trash btn-delete" onclick="deleteQuestion(${q.id})"></i>
+                            </div>
+                            <p class="card-text">${q.question}</p>
+                            <div class="options">
+                                ${q.options.map((option, i) => `
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="radio" 
+                                               name="history${q.id}" value="${i}">
+                                        <label class="form-check-label">${option}</label>
+                                    </div>
+                                `).join('')}
+                            </div>
+                            <small class="text-muted">
+                                Generated on: ${new Date(q.created_at).toLocaleString()}
+                            </small>
+                        </div>
+                    `;
+                    container.appendChild(card);
+                });
+            } catch (error) {
+                console.error('Error loading history:', error);
+            }
         }
+
+        async function deleteQuestion(id) {
+            if (!confirm('Are you sure you want to delete this question?')) {
+                return;
+            }
+            
+            try {
+                const response = await fetch(`/delete/${id}`, {
+                    method: 'DELETE',
+                });
+                
+                if (response.ok) {
+                    loadHistory();
+                } else {
+                    alert('Failed to delete question');
+                }
+            } catch (error) {
+                console.error('Error deleting question:', error);
+                alert('Error deleting question');
+            }
+        }
+
+        // Load history on page load
+        loadHistory();
     </script>
 </body>
 </html> 

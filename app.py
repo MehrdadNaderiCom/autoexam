@@ -8,6 +8,7 @@ from collector import WikipediaCollector
 from question_generator import QuestionGenerator
 from dotenv import load_dotenv
 import nltk
+import wikipedia
 
 # Load environment variables
 load_dotenv()
@@ -52,6 +53,24 @@ class Exam(db.Model):
     topic = db.Column(db.String(200), nullable=False)
     questions = db.Column(db.JSON, nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+class Question(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    topic = db.Column(db.String(200), nullable=False)
+    question_text = db.Column(db.Text, nullable=False)
+    options = db.Column(db.Text, nullable=False)  # Stored as JSON string
+    answer = db.Column(db.Text, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'topic': self.topic,
+            'question': self.question_text,
+            'options': eval(self.options),  # Convert JSON string back to list
+            'answer': self.answer,
+            'created_at': self.created_at.isoformat()
+        }
 
 @app.route('/')
 def home():
@@ -141,6 +160,76 @@ def health_check():
             'status': 'unhealthy',
             'error': str(e)
         }), 500
+
+@app.route('/generate', methods=['POST'])
+def generate_questions():
+    """Generate questions from Wikipedia content."""
+    try:
+        data = request.get_json()
+        topic = data.get('topic')
+        num_questions = int(data.get('num_questions', 5))
+        
+        if not topic:
+            return jsonify({'error': 'Topic is required'}), 400
+        
+        # Search Wikipedia
+        try:
+            # First try to get the exact page
+            page = wikipedia.page(topic)
+        except wikipedia.exceptions.DisambiguationError as e:
+            # If disambiguation error, use the first option
+            page = wikipedia.page(e.options[0])
+        except wikipedia.exceptions.PageError:
+            return jsonify({'error': 'Topic not found on Wikipedia'}), 404
+        
+        # Generate questions
+        questions = question_generator.generate_questions(page.content, num_questions)
+        
+        # Store questions in database
+        for q in questions:
+            question = Question(
+                topic=topic,
+                question_text=q['question'],
+                options=str(q['options']),  # Convert list to string for storage
+                answer=q['answer']
+            )
+            db.session.add(question)
+        
+        db.session.commit()
+        
+        return jsonify({
+            'questions': questions,
+            'topic': topic,
+            'wikipedia_url': page.url
+        })
+        
+    except Exception as e:
+        logger.error(f"Error generating questions: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/history')
+def get_history():
+    """Get all previously generated questions."""
+    try:
+        questions = Question.query.order_by(Question.created_at.desc()).all()
+        return jsonify({
+            'questions': [q.to_dict() for q in questions]
+        })
+    except Exception as e:
+        logger.error(f"Error fetching history: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/delete/<int:question_id>', methods=['DELETE'])
+def delete_question(question_id):
+    """Delete a specific question."""
+    try:
+        question = Question.query.get_or_404(question_id)
+        db.session.delete(question)
+        db.session.commit()
+        return jsonify({'message': 'Question deleted successfully'})
+    except Exception as e:
+        logger.error(f"Error deleting question: {str(e)}")
+        return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':
     with app.app_context():
