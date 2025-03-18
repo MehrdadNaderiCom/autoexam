@@ -48,8 +48,12 @@ class QuestionGenerator:
                 logger.info(f"Found existing {package} data")
             except LookupError:
                 logger.info(f"Downloading {package}...")
-                nltk.download(package, quiet=True, download_dir=self.nltk_data_dir)
-                logger.info(f"Successfully downloaded {package}")
+                try:
+                    nltk.download(package, quiet=True, download_dir=self.nltk_data_dir)
+                    logger.info(f"Successfully downloaded {package}")
+                except Exception as e:
+                    logger.warning(f"Failed to download {package}: {e}")
+                    raise
 
     def _basic_tokenize(self, text: str) -> List[str]:
         """Basic sentence tokenization when NLTK data is not available."""
@@ -84,7 +88,18 @@ class QuestionGenerator:
                         break
             
             if not entities:
-                return None
+                # If still no entities, try to generate a general question
+                return {
+                    'type': 'multiple_choice',
+                    'question': 'What is the main point of this statement?',
+                    'options': [
+                        sentence,
+                        'This statement is incorrect',
+                        'This statement is unrelated',
+                        'None of the above'
+                    ],
+                    'answer': sentence
+                }
                 
             # Choose a random entity to ask about
             entity, entity_type = random.choice(entities)
@@ -161,7 +176,11 @@ class QuestionGenerator:
         if self.use_basic_tokenization:
             sentences = self._basic_tokenize(content)
         else:
-            sentences = sent_tokenize(content)
+            try:
+                sentences = sent_tokenize(content)
+            except Exception as e:
+                logger.warning(f"Error using NLTK tokenizer: {e}. Falling back to basic tokenization.")
+                sentences = self._basic_tokenize(content)
         
         # Filter out short sentences and those that might not be informative
         valid_sentences = [
