@@ -110,39 +110,37 @@ class QuestionGenerator:
             'explanation': f"The word '{keyword}' fits in this context based on the original text."
         }
 
-    def generate_questions(self, text: str, num_questions: int = 5) -> List[Dict]:
-        """Generate a list of questions from the given text."""
-        questions = []
-        sentences = self._tokenize_text(text)
-        
-        if not sentences:
-            return questions
-
-        # Try to generate twice as many questions as requested
-        attempts = min(len(sentences), num_questions * 2)
-        used_sentences = set()
-
-        while len(questions) < num_questions and attempts > 0:
-            sentence = random.choice(sentences)
-            if sentence in used_sentences:
-                attempts -= 1
-                continue
-
-            used_sentences.add(sentence)
-            keywords = self._extract_keywords(sentence)
-
-            if keywords:
-                keyword = random.choice(keywords)
-                # Try ChatGPT first, fall back to basic if it fails
-                question = self._enhance_with_chatgpt(sentence, keyword)
-                if not question:
+    def generate_questions(self, content, num_questions=5):
+        """Generate questions from the given content."""
+        try:
+            sentences = self._tokenize_text(content['text'])
+            if not sentences:
+                return None
+            
+            questions = []
+            wiki_url = content.get('url', '')  # Get Wikipedia URL from content
+            
+            for _ in range(min(num_questions, len(sentences))):
+                sentence = random.choice(sentences)
+                sentences.remove(sentence)  # Avoid reusing the same sentence
+                
+                try:
+                    keywords = self._extract_keywords(sentence)
+                    if keywords:
+                        keyword = random.choice(keywords)
+                        question_data = self._enhance_with_chatgpt(sentence, keyword)
+                        if question_data:
+                            question_data['source_url'] = wiki_url  # Add Wikipedia URL to question data
+                            questions.append(question_data)
+                except Exception as e:
+                    logger.error(f"Error generating question with ChatGPT: {e}")
+                    # Fallback to basic question if ChatGPT fails
                     question = self._generate_basic_question(sentence, keyword)
-                if question:
-                    questions.append(question)
-
-            attempts -= 1
-
-        return questions[:num_questions]
+                    if question:
+                        question['source_url'] = wiki_url  # Add Wikipedia URL to fallback question
+                        questions.append(question)
+            
+            return questions if questions else None
 
 # Initialize the question generator
 question_generator = QuestionGenerator() 

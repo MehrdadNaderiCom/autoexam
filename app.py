@@ -69,6 +69,7 @@ class Question(db.Model):
     options = db.Column(db.Text, nullable=False)  # Stored as JSON string
     answer = db.Column(db.Text, nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    source_url = db.Column(db.Text)  # Added for source URL
 
     def to_dict(self):
         return {
@@ -77,7 +78,8 @@ class Question(db.Model):
             'question': self.question_text,
             'options': eval(self.options),  # Convert JSON string back to list
             'answer': self.answer,
-            'created_at': self.created_at.isoformat()
+            'created_at': self.created_at.isoformat(),
+            'source_url': self.source_url
         }
 
 # Create database tables
@@ -91,8 +93,26 @@ def init_db():
             raise
 
 @app.route('/')
-def home():
+def index():
     return render_template('index.html')
+
+@app.route('/history')
+def history_page():
+    return render_template('history.html')
+
+@app.route('/api/history')
+def get_history():
+    try:
+        exams = Exam.query.order_by(Exam.created_at.desc()).all()
+        return jsonify([{
+            'id': exam.id,
+            'topic': exam.topic,
+            'questions': exam.questions,
+            'created_at': exam.created_at.isoformat()
+        } for exam in exams])
+    except Exception as e:
+        logger.error(f"Error retrieving history: {e}")
+        return jsonify({'error': 'Failed to retrieve history'}), 500
 
 @app.route('/api/generate', methods=['POST'])
 def generate_exam():
@@ -105,12 +125,15 @@ def generate_exam():
             return jsonify({'error': 'Topic is required'}), 400
         
         logger.info(f"Fetching content for topic: {topic}")
-        content = wikipedia_collector.get_topic_content(topic)
-        if not content:
+        wiki_content = wikipedia_collector.get_topic_content(topic)
+        if not wiki_content:
             return jsonify({'error': 'Could not find content for the given topic'}), 404
         
         logger.info("Processing content")
-        processed_content = wikipedia_collector.process_content(content)
+        processed_content = {
+            'text': wiki_content['text'],
+            'url': wiki_content['url']  # Include Wikipedia URL
+        }
         
         logger.info(f"Generating {num_questions} questions")
         questions = question_generator.generate_questions(processed_content, num_questions)
@@ -129,33 +152,18 @@ def generate_exam():
                 topic=topic,
                 question_text=q['question'],
                 options=str(q.get('options', [])),
-                answer=q['answer']
+                answer=q['answer'],
+                source_url=q.get('source_url', '')  # Save Wikipedia URL
             )
             db.session.add(question)
         
         db.session.commit()
         
-        # Format questions for frontend with enhanced structure
-        formatted_questions = []
-        for q in questions:
-            formatted_q = {
-                'question_type': q['type'],
-                'question_text': q['question'],
-                'options': q.get('options', []),
-                'answer_text': q['answer'],
-                'explanation': q.get('explanation', ''),
-                'show_answer': False  # Add this flag for frontend toggle
-            }
-            formatted_questions.append(formatted_q)
-        
         return jsonify({
-            'id': exam.id,
-            'topic': exam.topic,
-            'questions': formatted_questions
+            'questions': questions
         })
-    
     except Exception as e:
-        logger.error(f"Error in generate_exam: {str(e)}", exc_info=True)
+        logger.error(f"Error generating exam: {e}")
         return jsonify({'error': str(e)}), 500
 
 @app.route('/exam/<int:exam_id>', methods=['GET'])

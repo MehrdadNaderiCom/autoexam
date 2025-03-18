@@ -83,18 +83,50 @@
             border: 1px solid #f5c6cb;
             display: none;
         }
+        .project-description {
+            background-color: #f8f9fa;
+            padding: 20px;
+            border-radius: 10px;
+            margin-bottom: 30px;
+        }
+        .source-link {
+            font-size: 0.9em;
+            color: #6c757d;
+            margin-top: 10px;
+        }
+        .nav-links {
+            margin-bottom: 20px;
+        }
     </style>
 </head>
 <body>
-    <div class="container">
-        <h1 class="text-center mb-4">AutoExam Generator</h1>
-        
-        <div class="card mb-4">
-            <div class="card-body">
+    <div class="container mt-5">
+        <div class="nav-links">
+            <a href="/" class="btn btn-outline-primary me-2">Generate Questions</a>
+            <a href="/history" class="btn btn-outline-secondary">View History</a>
+        </div>
+
+        <div class="project-description">
+            <h1 class="mb-4">AutoExam Generator</h1>
+            <p>Welcome to AutoExam Generator, an AI-powered tool designed to help instructors create high-quality multiple-choice questions from any topic. The system uses Wikipedia content and ChatGPT to generate accurate, relevant questions with detailed explanations.</p>
+            <p>Features:</p>
+            <ul>
+                <li>Generate 1-10 questions on any topic</li>
+                <li>Questions based on verified Wikipedia content</li>
+                <li>AI-enhanced question formulation</li>
+                <li>Detailed explanations for each answer</li>
+                <li>Save and access previously generated questions</li>
+            </ul>
+        </div>
+
+        <div class="row justify-content-center">
+            <div class="col-md-8">
                 <form id="generateForm">
                     <div class="mb-3">
                         <label for="topic" class="form-label">Enter a topic:</label>
-                        <input type="text" class="form-control" id="topic" required>
+                        <input type="text" class="form-control" id="topic" required 
+                               placeholder="Enter specific topics like 'Quantum Physics', 'French Revolution', or 'Machine Learning Algorithms'"
+                               title="For best results, use specific topics rather than broad subjects. Example: 'Neural Networks' instead of just 'AI'">
                     </div>
                     <div class="mb-3">
                         <label for="numQuestions" class="form-label">Number of questions:</label>
@@ -102,19 +134,21 @@
                     </div>
                     <button type="submit" class="btn btn-primary">Generate Questions</button>
                 </form>
+
+                <div id="loading" class="text-center mt-4" style="display: none;">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                    <p class="mt-2">Generating questions... This may take a moment.</p>
+                </div>
+
+                <div id="error" class="alert alert-danger mt-4" style="display: none;"></div>
+
+                <div id="questions" class="mt-4">
+                    <!-- Questions will be inserted here -->
+                </div>
             </div>
         </div>
-
-        <div id="loading" class="loading">
-            <div class="spinner-border text-primary" role="status">
-                <span class="visually-hidden">Loading...</span>
-            </div>
-            <p class="mt-2">Generating questions...</p>
-        </div>
-
-        <div id="error" class="error"></div>
-        
-        <div id="questions"></div>
     </div>
 
     <script>
@@ -125,10 +159,10 @@
             const questionsDiv = document.getElementById('questions');
             const loading = document.getElementById('loading');
             const error = document.getElementById('error');
-            
-            questionsDiv.innerHTML = '';
-            error.style.display = 'none';
+
             loading.style.display = 'block';
+            error.style.display = 'none';
+            questionsDiv.innerHTML = '';
 
             try {
                 const response = await fetch('/api/generate', {
@@ -140,38 +174,38 @@
                 });
 
                 const data = await response.json();
-                
+
                 if (!response.ok) {
                     throw new Error(data.error || 'Failed to generate questions');
                 }
 
                 questionsDiv.innerHTML = data.questions.map((q, index) => `
-                    <div class="question-card">
-                        <h5>Question ${index + 1}</h5>
-                        <p>${q.question_text}</p>
-                        ${q.question_type === 'multiple_choice' ? `
-                            <ul class="option-list">
-                                ${q.options.map(option => `
-                                    <li>${option}</li>
+                    <div class="question-card mb-4">
+                        <h3>Question ${index + 1}</h3>
+                        <p class="question-text">${q.question}</p>
+                        ${q.options ? `
+                            <div class="options-list">
+                                ${q.options.map((opt, i) => `
+                                    <div class="option">
+                                        <span class="option-letter">${String.fromCharCode(65 + i)}.</span>
+                                        ${opt}
+                                    </div>
                                 `).join('')}
-                            </ul>
+                            </div>
                         ` : ''}
-                        <button class="toggle-answer" onclick="toggleAnswer(${index})">
-                            <i class="fas fa-eye"></i>
-                            <span>Show Answer</span>
-                        </button>
-                        <div class="answer-section" id="answer-${index}">
-                            <strong>Answer:</strong> ${q.answer_text}
-                            ${q.explanation ? `
-                                <div class="explanation">
-                                    <i class="fas fa-info-circle"></i>
-                                    <strong>Explanation:</strong> ${q.explanation}
-                                </div>
-                            ` : ''}
+                        <div class="answer-section mt-3">
+                            <button class="btn btn-sm btn-outline-primary toggle-answer" 
+                                    onclick="this.nextElementSibling.classList.toggle('show')">
+                                Show Answer
+                            </button>
+                            <div class="answer-content">
+                                <p><strong>Answer:</strong> ${q.answer}</p>
+                                ${q.explanation ? `<p><strong>Explanation:</strong> ${q.explanation}</p>` : ''}
+                                ${q.source_url ? `<p class="source-link">Source: <a href="${q.source_url}" target="_blank">Wikipedia Article</a></p>` : ''}
+                            </div>
                         </div>
                     </div>
                 `).join('');
-
             } catch (err) {
                 error.textContent = err.message;
                 error.style.display = 'block';
@@ -179,17 +213,6 @@
                 loading.style.display = 'none';
             }
         });
-
-        function toggleAnswer(index) {
-            const answerSection = document.getElementById(`answer-${index}`);
-            const button = answerSection.previousElementSibling;
-            const isVisible = answerSection.classList.contains('visible');
-            
-            answerSection.classList.toggle('visible');
-            button.innerHTML = isVisible ? 
-                '<i class="fas fa-eye"></i> <span>Show Answer</span>' : 
-                '<i class="fas fa-eye-slash"></i> <span>Hide Answer</span>';
-        }
     </script>
 </body>
 </html> 
