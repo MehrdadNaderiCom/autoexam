@@ -6,12 +6,17 @@ from datetime import datetime
 from collector import wikipedia_collector
 from analyzer import question_generator
 from dotenv import load_dotenv
+import nltk
 
 # Load environment variables
 load_dotenv()
 
 app = Flask(__name__)
 CORS(app)
+
+# Download NLTK data
+nltk.download('punkt')
+nltk.download('averaged_perceptron_tagger')
 
 # Database configuration
 app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL', 'sqlite:///exams.db')
