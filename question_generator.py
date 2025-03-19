@@ -1,3 +1,16 @@
+"""
+AutoExam Question Generator Module
+--------------------------------
+This module handles the generation of exam questions from text content.
+It uses NLTK for text processing and OpenAI's GPT-3.5 for question enhancement.
+
+The module provides functionality to:
+- Tokenize text into sentences
+- Extract relevant keywords
+- Generate multiple-choice questions
+- Generate fill-in-the-blank questions (basic)
+"""
+
 import os
 import random
 import nltk
@@ -5,11 +18,19 @@ import logging
 import openai
 from typing import List, Dict, Union
 
-# Set up logging
+# Configure logging for the module
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 class QuestionGenerator:
+    """
+    A class to generate exam questions from text content.
+    
+    This class provides methods to process text and generate both
+    multiple-choice and fill-in-the-blank questions using NLP
+    techniques and AI enhancement.
+    """
+
     def __init__(self):
         """Initialize the QuestionGenerator."""
         self.use_basic_tokenization = True
@@ -22,14 +43,30 @@ class QuestionGenerator:
             logger.info("NLTK data not found, using basic tokenization")
 
     def _basic_tokenize(self, text: str) -> List[str]:
-        """Basic sentence tokenization."""
-        # Split on common sentence endings
+        """
+        Perform basic sentence tokenization when NLTK is not available.
+        
+        Args:
+            text (str): The input text to tokenize
+            
+        Returns:
+            List[str]: A list of sentences
+        """
+        # Split on common sentence endings and clean the results
         text = text.replace('? ', '?|').replace('! ', '!|').replace('. ', '.|')
         sentences = text.split('|')
         return [s.strip() for s in sentences if s.strip()]
 
     def _tokenize_text(self, text: str) -> List[str]:
-        """Tokenize text into sentences using either NLTK or basic tokenization."""
+        """
+        Tokenize text into sentences using NLTK if available, otherwise use basic tokenization.
+        
+        Args:
+            text (str): The input text to tokenize
+            
+        Returns:
+            List[str]: A list of sentences
+        """
         try:
             if not self.use_basic_tokenization:
                 return nltk.sent_tokenize(text)
@@ -38,7 +75,16 @@ class QuestionGenerator:
         return self._basic_tokenize(text)
 
     def _extract_keywords(self, sentence: str) -> List[str]:
-        """Extract potential keywords from a sentence."""
+        """
+        Extract potential keywords from a sentence for question generation.
+        Uses NLTK POS tagging if available, otherwise uses length-based selection.
+        
+        Args:
+            sentence (str): The input sentence
+            
+        Returns:
+            List[str]: A list of potential keywords
+        """
         try:
             if not self.use_basic_tokenization:
                 words = nltk.word_tokenize(sentence)
@@ -52,7 +98,17 @@ class QuestionGenerator:
         return [word for word in words if len(word) >= 4 and word.isalnum()]
 
     def _enhance_with_chatgpt(self, sentence: str, keyword: str) -> Dict[str, Union[str, List[str]]]:
-        """Use ChatGPT to create a multiple-choice question."""
+        """
+        Use ChatGPT to create an enhanced multiple-choice question.
+        
+        Args:
+            sentence (str): The context sentence
+            keyword (str): The key concept to focus on
+            
+        Returns:
+            Dict: A dictionary containing the question, options, answer, and explanation
+                 Returns None if generation fails
+        """
         try:
             api_key = os.getenv('OPENAI_API_KEY')
             if not api_key:
@@ -155,7 +211,16 @@ Format your response as a JSON object with these exact fields:
             return None
 
     def _generate_basic_question(self, sentence: str, keyword: str) -> Dict[str, Union[str, List[str]]]:
-        """Generate a basic fill-in-the-blank question."""
+        """
+        Generate a simple fill-in-the-blank question by replacing a keyword.
+        
+        Args:
+            sentence (str): The context sentence
+            keyword (str): The word to blank out
+            
+        Returns:
+            Dict: A dictionary containing the question, answer, and explanation
+        """
         question_text = sentence.replace(keyword, "________")
         return {
             'type': 'fill_blank',
@@ -166,7 +231,17 @@ Format your response as a JSON object with these exact fields:
         }
 
     def generate_questions(self, content, num_questions=5):
-        """Generate multiple-choice questions from the given content."""
+        """
+        Generate a set of questions from the provided content.
+        
+        Args:
+            content (Union[str, Dict]): The input text or a dictionary containing text and metadata
+            num_questions (int): The number of questions to generate (default: 5)
+            
+        Returns:
+            List[Dict]: A list of generated questions with their answers and explanations
+                       Returns None if generation fails
+        """
         try:
             # Handle both string and dictionary content
             if isinstance(content, dict):

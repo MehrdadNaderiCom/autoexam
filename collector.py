@@ -1,3 +1,14 @@
+"""
+AutoExam Wikipedia Collector Module
+---------------------------------
+This module handles the retrieval and processing of educational content from Wikipedia.
+It provides functionality to search for topics, extract relevant content, and clean
+the text for question generation.
+
+The module uses NLTK for advanced text processing when available, with fallback
+to basic text processing methods.
+"""
+
 import wikipedia
 import logging
 import nltk
@@ -5,13 +16,25 @@ import os
 import requests
 from typing import Dict, List, Optional, Union
 
-# Set up logging
+# Configure logging for the module
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 class WikipediaCollector:
+    """
+    A class to collect and process educational content from Wikipedia.
+    
+    This class provides methods to search Wikipedia for topics,
+    extract relevant content, and process it into a format suitable
+    for question generation.
+    """
+
     def __init__(self):
-        """Initialize the WikipediaCollector."""
+        """
+        Initialize the WikipediaCollector.
+        
+        Sets up Wikipedia API language and checks for NLTK data availability.
+        """
         logger.info("Initializing WikipediaCollector")
         wikipedia.set_lang('en')
         self.use_nltk = True
@@ -23,7 +46,19 @@ class WikipediaCollector:
             self.use_nltk = False
 
     def get_topic_content(self, topic: str) -> Optional[Dict[str, str]]:
-        """Get content from Wikipedia for a given topic."""
+        """
+        Retrieve and process content from Wikipedia for a given topic.
+        
+        Args:
+            topic (str): The topic to search for on Wikipedia
+            
+        Returns:
+            Optional[Dict[str, str]]: A dictionary containing:
+                - 'text': The processed content
+                - 'url': The Wikipedia page URL
+                - 'title': The page title
+                Returns None if no suitable content is found
+        """
         try:
             logger.info(f"Searching Wikipedia for topic: {topic}")
             # Search for the topic
@@ -91,7 +126,21 @@ class WikipediaCollector:
             return None
 
     def process_content(self, content: str) -> str:
-        """Process the Wikipedia content for question generation."""
+        """
+        Process Wikipedia content to make it suitable for question generation.
+        
+        This method:
+        - Splits content into manageable sections
+        - Removes special formatting and irrelevant content
+        - Applies sentence tokenization if NLTK is available
+        - Filters out non-informative sentences
+        
+        Args:
+            content (str): Raw Wikipedia content
+            
+        Returns:
+            str: Processed and cleaned content
+        """
         if not content:
             return ""
 

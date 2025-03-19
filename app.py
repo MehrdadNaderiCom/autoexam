@@ -1,3 +1,17 @@
+"""
+AutoExam Web Application
+-----------------------
+This is the main Flask application for AutoExam, an AI-powered exam question generator.
+The application provides a web interface for generating exam questions from Wikipedia
+content and managing question history.
+
+Features:
+- Generate multiple-choice questions from any topic
+- Store and retrieve question history
+- RESTful API endpoints for question generation and management
+- Database integration for persistent storage
+"""
+
 import os
 import logging
 from flask import Flask, request, jsonify, render_template
@@ -10,17 +24,17 @@ from dotenv import load_dotenv
 import nltk
 import wikipedia
 
-# Load environment variables
+# Load environment variables from .env file
 load_dotenv()
 
-# Configure logging
+# Configure application logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
-CORS(app)
+CORS(app)  # Enable Cross-Origin Resource Sharing
 
-# Configure database
+# Configure database connection
 database_url = os.environ.get('DATABASE_URL', '')
 if database_url.startswith('postgres://'):
     database_url = database_url.replace('postgres://', 'postgresql://', 1)
@@ -31,7 +45,12 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
 
 def download_nltk_data():
-    """Download NLTK data with error handling."""
+    """
+    Download required NLTK data packages.
+    
+    Creates a local directory for NLTK data and downloads required packages
+    for text processing. Continues even if some downloads fail.
+    """
     nltk_data_dir = os.path.join(os.getcwd(), 'nltk_data')
     os.makedirs(nltk_data_dir, exist_ok=True)
     nltk.data.path.append(nltk_data_dir)
@@ -61,13 +80,24 @@ except Exception as e:
     # Continue anyway, we'll handle errors in the endpoints
 
 class Exam(db.Model):
+    """
+    Database model for storing complete exams.
+    
+    Each exam contains multiple questions on a specific topic
+    and tracks when it was created.
+    """
     id = db.Column(db.Integer, primary_key=True)
     topic = db.Column(db.String(200), nullable=False)
     questions = db.Column(db.JSON, nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     def to_dict(self):
-        """Convert exam to dictionary."""
+        """
+        Convert exam model to dictionary format for JSON serialization.
+        
+        Returns:
+            dict: The exam data in dictionary format
+        """
         return {
             'id': self.id,
             'topic': self.topic,
@@ -76,7 +106,12 @@ class Exam(db.Model):
         }
 
 class Question(db.Model):
-    """Model for storing individual questions."""
+    """
+    Database model for storing individual questions.
+    
+    Supports both multiple-choice and fill-in-the-blank questions,
+    including options, answers, and explanations.
+    """
     id = db.Column(db.Integer, primary_key=True)
     topic = db.Column(db.String(200), nullable=False)
     question_text = db.Column(db.Text, nullable=False)
@@ -114,14 +149,22 @@ with app.app_context():
 
 @app.route('/')
 def index():
+    """Render the main application page."""
     return render_template('index.html')
 
 @app.route('/history')
 def history_page():
+    """Render the exam history page."""
     return render_template('history.html')
 
 @app.route('/api/history')
 def get_history():
+    """
+    Retrieve the history of generated exams.
+    
+    Returns:
+        JSON: List of all exams in reverse chronological order
+    """
     try:
         exams = Exam.query.order_by(Exam.created_at.desc()).all()
         return jsonify([exam.to_dict() for exam in exams])
@@ -131,7 +174,16 @@ def get_history():
 
 @app.route('/generate_exam', methods=['POST'])
 def generate_exam():
-    """Generate exam questions based on the given topic."""
+    """
+    Generate a new exam from a given topic.
+    
+    Expects JSON input with:
+    - topic: The subject to generate questions about
+    - num_questions: (optional) Number of questions to generate
+    
+    Returns:
+        JSON: Generated questions with their answers and explanations
+    """
     try:
         data = request.get_json()
         topic = data.get('topic')
@@ -204,6 +256,15 @@ def generate_exam():
 
 @app.route('/exam/<int:exam_id>', methods=['GET'])
 def get_exam(exam_id):
+    """
+    Retrieve a specific exam by ID.
+    
+    Args:
+        exam_id: The ID of the exam to retrieve
+        
+    Returns:
+        JSON: The exam data if found, 404 if not found
+    """
     try:
         exam = Exam.query.get_or_404(exam_id)
         return jsonify({
@@ -218,6 +279,14 @@ def get_exam(exam_id):
 
 @app.route('/health')
 def health_check():
+    """
+    Check the health status of the application.
+    
+    Verifies database connectivity and returns service status.
+    
+    Returns:
+        JSON: Health status information
+    """
     try:
         # Test database connection
         db.session.execute('SELECT 1')
@@ -234,7 +303,15 @@ def health_check():
 
 @app.route('/delete/<int:question_id>', methods=['DELETE'])
 def delete_question(question_id):
-    """Delete a specific question."""
+    """
+    Delete a specific question from the database.
+    
+    Args:
+        question_id: The ID of the question to delete
+        
+    Returns:
+        JSON: Success or error message
+    """
     try:
         question = Question.query.get_or_404(question_id)
         db.session.delete(question)
